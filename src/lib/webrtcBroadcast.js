@@ -28,61 +28,130 @@ async function flushIce(pc, pending) {
   }
 }
 
-/** Admin: publica media a cada viewer */
+function trackRole(track) {
+  if (!track) return null
+  if (track._luditoRole) return track._luditoRole
+  return track.kind === 'audio' ? 'audio' : null
+}
+
+function isPcHealthy(pc) {
+  if (!pc) return false
+  const c = pc.connectionState
+  const i = pc.iceConnectionState
+  return (
+    c === 'connected' ||
+    c === 'connecting' ||
+    i === 'connected' ||
+    i === 'completed' ||
+    i === 'checking'
+  )
+}
+
+/** Actualiza tracks en PC existente. false = hace falta reconectar (roles nuevos). */
+async function syncSenders(pc, stream) {
+  const desired = {}
+  for (const track of stream.getTracks()) {
+    const role = trackRole(track) || (track.kind === 'audio' ? 'audio' : 'screen')
+    track._luditoRole = role
+    desired[role] = track
+  }
+
+  const covered = new Set()
+  for (const sender of pc.getSenders()) {
+    const current = sender.track
+    if (!current) continue
+    const role = trackRole(current)
+    if (!role || !desired[role]) continue
+    if (sender.track !== desired[role]) {
+      await sender.replaceTrack(desired[role])
+    }
+    covered.add(role)
+  }
+
+  return Object.keys(desired).every((role) => covered.has(role))
+}
+
+/** Admin: publica media a cada viewer (sin recrear la PC a cada clic) */
 export function createBroadcaster({ sendSignal, getLocalStream }) {
   const peers = new Map()
+  const locks = new Map()
 
-  async function connectViewer(viewerId) {
-    const existing = peers.get(viewerId)
-    if (existing) {
-      existing.pc.close()
-      peers.delete(viewerId)
+  async function withLock(viewerId, fn) {
+    const prev = locks.get(viewerId) || Promise.resolve()
+    let release
+    const gate = new Promise((resolve) => { release = resolve })
+    locks.set(viewerId, prev.then(() => gate).catch(() => gate))
+    try {
+      await prev.catch(() => {})
+      return await fn()
+    } finally {
+      release()
     }
+  }
 
-    const stream = getLocalStream?.()
-    if (!stream || stream.getTracks().length === 0) return
+  async function connectViewer(viewerId, { force = false } = {}) {
+    return withLock(viewerId, async () => {
+      const stream = getLocalStream?.()
+      if (!stream || stream.getTracks().length === 0) return false
 
-    const pc = new RTCPeerConnection(iceConfig())
-    const pending = []
-    peers.set(viewerId, { pc, pending })
-
-    const roles = {}
-    for (const track of stream.getTracks()) {
-      const role = track._luditoRole || (track.kind === 'audio' ? 'audio' : 'screen')
-      roles[track.id] = role
-      try {
-        track.contentHint = role === 'camera' ? 'motion' : track.kind === 'video' ? 'detail' : track.contentHint
-      } catch {
-        /* ignore */
-      }
-      pc.addTrack(track, stream)
-    }
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        sendSignal(viewerId, { kind: 'candidate', candidate: event.candidate.toJSON?.() || event.candidate })
-      }
-    }
-
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed') {
+      const existing = peers.get(viewerId)
+      if (existing && !force && isPcHealthy(existing.pc)) {
         try {
-          pc.restartIce()
+          const synced = await syncSenders(existing.pc, stream)
+          if (synced) return true
+        } catch {
+          /* reconnect below */
+        }
+      }
+
+      if (existing) {
+        try { existing.pc.close() } catch { /* ignore */ }
+        peers.delete(viewerId)
+      }
+
+      const pc = new RTCPeerConnection(iceConfig())
+      const pending = []
+      peers.set(viewerId, { pc, pending })
+
+      const roles = {}
+      for (const track of stream.getTracks()) {
+        const role = trackRole(track) || (track.kind === 'audio' ? 'audio' : 'screen')
+        track._luditoRole = role
+        roles[track.id] = role
+        try {
+          track.contentHint = role === 'camera' ? 'motion' : track.kind === 'video' ? 'detail' : track.contentHint
         } catch {
           /* ignore */
         }
+        pc.addTrack(track, stream)
       }
-    }
 
-    const offer = await pc.createOffer({
-      offerToReceiveAudio: false,
-      offerToReceiveVideo: false,
-    })
-    await pc.setLocalDescription(offer)
-    sendSignal(viewerId, {
-      kind: 'offer',
-      sdp: pc.localDescription,
-      roles,
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          sendSignal(viewerId, {
+            kind: 'candidate',
+            candidate: event.candidate.toJSON?.() || event.candidate,
+          })
+        }
+      }
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'failed') {
+          try { pc.restartIce() } catch { /* ignore */ }
+        }
+      }
+
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: false,
+        offerToReceiveVideo: false,
+      })
+      await pc.setLocalDescription(offer)
+      sendSignal(viewerId, {
+        kind: 'offer',
+        sdp: pc.localDescription,
+        roles,
+      })
+      return true
     })
   }
 
@@ -108,13 +177,13 @@ export function createBroadcaster({ sendSignal, getLocalStream }) {
     }
   }
 
-  async function republishAll(viewerIds = [...peers.keys()]) {
-    for (const viewerId of viewerIds) {
-      await connectViewer(viewerId)
+  async function republishAll(viewerIds = [...peers.keys()], { force = false } = {}) {
+    const ids = [...new Set(viewerIds.length ? viewerIds : [...peers.keys()])]
+    for (const viewerId of ids) {
+      await connectViewer(viewerId, { force })
     }
   }
 
-  /** Cambia un track al aire sin recrear la conexión (p. ej. otra ventana/pantalla). */
   async function replaceTrackByRole(role, nextTrack) {
     if (nextTrack) nextTrack._luditoRole = role
     const tasks = []
@@ -122,8 +191,7 @@ export function createBroadcaster({ sendSignal, getLocalStream }) {
       for (const sender of pc.getSenders()) {
         const current = sender.track
         if (!current) continue
-        const currentRole = current._luditoRole || (current.kind === 'audio' ? 'audio' : null)
-        if (currentRole === role) {
+        if (trackRole(current) === role) {
           tasks.push(sender.replaceTrack(nextTrack))
         }
       }
@@ -132,23 +200,46 @@ export function createBroadcaster({ sendSignal, getLocalStream }) {
     return tasks.length > 0
   }
 
+  function setAudioEnabled(enabled) {
+    for (const { pc } of peers.values()) {
+      for (const sender of pc.getSenders()) {
+        const track = sender.track
+        if (track && (trackRole(track) === 'audio' || track.kind === 'audio')) {
+          track.enabled = Boolean(enabled)
+        }
+      }
+    }
+  }
+
   function knownViewers() {
     return [...peers.keys()]
   }
 
   function close() {
-    for (const { pc } of peers.values()) pc.close()
+    for (const { pc } of peers.values()) {
+      try { pc.close() } catch { /* ignore */ }
+    }
     peers.clear()
+    locks.clear()
   }
 
-  return { connectViewer, handleSignal, republishAll, replaceTrackByRole, knownViewers, close }
+  return {
+    connectViewer,
+    handleSignal,
+    republishAll,
+    replaceTrackByRole,
+    setAudioEnabled,
+    knownViewers,
+    close,
+  }
 }
 
-/** Viewer: recibe pantalla + cámara + audio */
+/** Viewer: SOLO recibe (sin micrófono ni cámara local) */
 export function createViewer({ sendSignal, onStreams, onConnectionState }) {
   let pc = null
   let pending = []
   let adminId = null
+  let offerSeq = 0
   const remote = {
     screen: null,
     camera: null,
@@ -186,8 +277,9 @@ export function createViewer({ sendSignal, onStreams, onConnectionState }) {
     adminId = from || adminId
 
     if (signal.kind === 'offer') {
+      const seq = ++offerSeq
       if (pc) {
-        pc.close()
+        try { pc.close() } catch { /* ignore */ }
         pc = null
       }
       pending = []
@@ -200,6 +292,7 @@ export function createViewer({ sendSignal, onStreams, onConnectionState }) {
       let videoCount = 0
 
       pc.ontrack = (event) => {
+        if (seq !== offerSeq) return
         const track = event.track
         let role = roles[track.id]
         if (!role) {
@@ -214,11 +307,7 @@ export function createViewer({ sendSignal, onStreams, onConnectionState }) {
         else if (role === 'audio') remote.audio = track
         else remote.screen = track
 
-        try {
-          track.enabled = true
-        } catch {
-          /* ignore */
-        }
+        try { track.enabled = true } catch { /* ignore */ }
 
         track.onunmute = () => emit()
         track.onmute = () => emit()
@@ -233,7 +322,10 @@ export function createViewer({ sendSignal, onStreams, onConnectionState }) {
 
       pc.onicecandidate = (event) => {
         if (event.candidate && adminId) {
-          sendSignal(adminId, { kind: 'candidate', candidate: event.candidate.toJSON?.() || event.candidate })
+          sendSignal(adminId, {
+            kind: 'candidate',
+            candidate: event.candidate.toJSON?.() || event.candidate,
+          })
         }
       }
 
@@ -241,11 +333,7 @@ export function createViewer({ sendSignal, onStreams, onConnectionState }) {
         onConnectionState?.(pc.connectionState)
         emit()
         if (pc.connectionState === 'failed') {
-          try {
-            pc.restartIce()
-          } catch {
-            /* ignore */
-          }
+          try { pc.restartIce() } catch { /* ignore */ }
         }
       }
 
@@ -255,6 +343,7 @@ export function createViewer({ sendSignal, onStreams, onConnectionState }) {
       }
 
       await pc.setRemoteDescription(signal.sdp)
+      if (seq !== offerSeq) return
       await flushIce(pc, pending)
       const answer = await pc.createAnswer()
       await pc.setLocalDescription(answer)
@@ -270,7 +359,7 @@ export function createViewer({ sendSignal, onStreams, onConnectionState }) {
   }
 
   function close() {
-    pc?.close()
+    try { pc?.close() } catch { /* ignore */ }
     pc = null
     pending = []
     adminId = null

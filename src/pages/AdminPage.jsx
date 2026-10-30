@@ -34,6 +34,8 @@ export function AdminPage() {
   const micMutedRef = useRef(true)
   const viewerIdsRef = useRef(new Set())
   const skipRepublishRef = useRef(false)
+  const republishTimerRef = useRef(null)
+  const busyMediaRef = useRef(false)
 
   const { state, you, error, connected, send, setHandlers, setError } = useRoom({
     roomId: roomKey,
@@ -77,10 +79,11 @@ export function AdminPage() {
         tracks.push(track)
       }
     }
-    if (mic && !micMutedRef.current) {
+    // Mic siempre en el stream si existe: mute = track.enabled false (sin renegociar)
+    if (mic) {
       for (const track of mic.getAudioTracks()) {
         track._luditoRole = 'audio'
-        track.enabled = true
+        track.enabled = !micMutedRef.current
         tracks.push(track)
       }
     }
@@ -90,18 +93,29 @@ export function AdminPage() {
     return mixed
   }, [])
 
-  const republish = useCallback(async () => {
+  const republish = useCallback(async ({ force = false } = {}) => {
     buildOutgoingStream()
     const ids = [...viewerIdsRef.current]
-    if (ids.length) await broadcasterRef.current?.republishAll(ids)
+    if (!ids.length) return
+    await broadcasterRef.current?.republishAll(ids, { force })
   }, [buildOutgoingStream])
+
+  const scheduleRepublish = useCallback((opts) => {
+    window.clearTimeout(republishTimerRef.current)
+    republishTimerRef.current = window.setTimeout(() => {
+      republish(opts)
+    }, 350)
+  }, [republish])
 
   useEffect(() => {
     broadcasterRef.current = createBroadcaster({
       sendSignal: (to, signal) => send({ type: 'signal', to, signal }),
       getLocalStream: () => mixedStreamRef.current || buildOutgoingStream(),
     })
-    return () => broadcasterRef.current?.close()
+    return () => {
+      window.clearTimeout(republishTimerRef.current)
+      broadcasterRef.current?.close()
+    }
   }, [send, buildOutgoingStream])
 
   useEffect(() => {
@@ -109,7 +123,8 @@ export function AdminPage() {
       onViewerReady: ({ viewerId }) => {
         viewerIdsRef.current.add(viewerId)
         buildOutgoingStream()
-        broadcasterRef.current?.connectViewer(viewerId)
+        // No forzar: si ya está conectado, solo sincroniza tracks
+        broadcasterRef.current?.connectViewer(viewerId, { force: false })
       },
       onSignal: ({ from, signal }) => {
         broadcasterRef.current?.handleSignal(from, signal)
@@ -162,6 +177,7 @@ export function AdminPage() {
     return () => cancelAnimationFrame(frameId)
   }, [savedCropRect])
 
+  // Aviso de estado a la sala (no regenera WebRTC)
   useEffect(() => {
     const active = Boolean(screenStream || cameraStream)
     setIsLive(active)
@@ -172,13 +188,36 @@ export function AdminPage() {
       cameraActive: Boolean(cameraStream),
       screenActive: Boolean(screenStream),
     })
+  }, [screenStream, cameraStream, micMuted, send])
+
+  // Solo pantalla/cámara cambian la topología de tracks → republish con debounce
+  useEffect(() => {
     if (skipRepublishRef.current) {
       skipRepublishRef.current = false
       buildOutgoingStream()
-      return
+      return undefined
     }
-    republish()
-  }, [screenStream, cameraStream, micStream, micMuted, send, republish, buildOutgoingStream])
+    scheduleRepublish({ force: false })
+    return () => window.clearTimeout(republishTimerRef.current)
+  }, [screenStream, cameraStream, scheduleRepublish, buildOutgoingStream])
+
+  // Mic: enabled on/off sin cortar la PC de los viewers
+  useEffect(() => {
+    if (!micStream) return
+    micStream.getAudioTracks().forEach((t) => {
+      t._luditoRole = 'audio'
+      t.enabled = !micMuted
+    })
+    buildOutgoingStream()
+    broadcasterRef.current?.setAudioEnabled(!micMuted)
+  }, [micMuted, micStream, buildOutgoingStream])
+
+  // Primera vez que aparece el mic en el mix: engancharlo a peers (o republish suave)
+  useEffect(() => {
+    if (!micStream) return
+    buildOutgoingStream()
+    scheduleRepublish({ force: false })
+  }, [micStream, buildOutgoingStream, scheduleRepublish])
 
   useEffect(() => () => {
     screenStreamRef.current?.getTracks().forEach((t) => t.stop())
@@ -197,16 +236,16 @@ export function AdminPage() {
     setCameraStream(null)
   }, [])
 
+  // Calidad moderada: menos CPU en admin + TURN free más estable
   const displayMediaOptions = {
     video: {
-      cursor: 'always',
-      frameRate: { ideal: 30 },
+      cursor: 'motion',
+      frameRate: { ideal: 24, max: 30 },
       displaySurface: 'monitor',
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
+      width: { ideal: 1280, max: 1280 },
+      height: { ideal: 720, max: 720 },
     },
     audio: false,
-    // Chrome: permite cambiar la ventana/pestaña compartida sin cortar el track
     surfaceSwitching: 'include',
     selfBrowserSurface: 'exclude',
     preferCurrentTab: false,
@@ -278,7 +317,16 @@ export function AdminPage() {
 
   const startCamera = async () => {
     try {
-      const next = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      if (cameraStreamRef.current) return cameraStreamRef.current
+      const next = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 480, max: 640 },
+          height: { ideal: 360, max: 480 },
+          frameRate: { ideal: 20, max: 24 },
+        },
+        audio: false,
+      })
       next.getVideoTracks()[0].onended = () => {
         stopCamera()
         setMessage('Cámara detenida')
@@ -296,11 +344,17 @@ export function AdminPage() {
   const ensureMic = async () => {
     if (micStreamRef.current) return micStreamRef.current
     const next = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    next.getAudioTracks().forEach((t) => {
+      t._luditoRole = 'audio'
+      t.enabled = !micMutedRef.current
+    })
     setMicStream(next)
     return next
   }
 
   const toggleMic = async () => {
+    if (busyMediaRef.current) return
+    busyMediaRef.current = true
     try {
       if (micMuted) {
         await ensureMic()
@@ -315,29 +369,35 @@ export function AdminPage() {
       }
     } catch {
       setMessage('No se pudo acceder al micrófono')
+    } finally {
+      busyMediaRef.current = false
     }
   }
 
-  useEffect(() => {
-    if (!micStream) return
-    micStream.getAudioTracks().forEach((t) => { t.enabled = !micMuted })
-  }, [micMuted, micStream])
-
   const startLive = async () => {
+    if (busyMediaRef.current) return
+    busyMediaRef.current = true
     setMessage('Iniciando en vivo…')
-    const screen = screenStream || await startScreen()
-    if (!cameraStream) await startCamera()
-    if (micMuted) {
-      try {
-        await ensureMic()
-        setMicMuted(false)
-        send({ type: 'mic', muted: false })
-      } catch {
-        /* mic optional */
+    try {
+      const screen = screenStreamRef.current || await startScreen()
+      if (!cameraStreamRef.current) await startCamera()
+      if (micMutedRef.current) {
+        try {
+          await ensureMic()
+          setMicMuted(false)
+          send({ type: 'mic', muted: false })
+        } catch {
+          /* mic optional */
+        }
       }
-    }
-    if (screen || cameraStreamRef.current) {
-      setMessage('EN VIVO · los viewers ya pueden verte')
+      buildOutgoingStream()
+      // Una sola publicación fuerte a todos los viewers conectados
+      await republish({ force: true })
+      if (screen || cameraStreamRef.current) {
+        setMessage('EN VIVO · los viewers ya pueden verte')
+      }
+    } finally {
+      busyMediaRef.current = false
     }
   }
 
@@ -404,6 +464,7 @@ export function AdminPage() {
         onStartLive={startLive}
         onStopLive={stopLive}
         onToggleScreen={() => {
+          if (busyMediaRef.current) return
           if (screenStream) {
             stopScreen()
             setMessage(cameraStream
@@ -415,6 +476,7 @@ export function AdminPage() {
         }}
         onChangeScreen={changeScreen}
         onToggleCamera={() => {
+          if (busyMediaRef.current) return
           if (cameraStream) {
             stopCamera()
             setMessage('Cámara detenida')

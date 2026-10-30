@@ -315,7 +315,7 @@ export function RoomArena({
           </div>
 
           <div className="viewer-action-strip">
-            <div className="viewer-volume-compact" title="Volumen">
+            <div className="viewer-volume-compact" title="Volumen del en vivo (altavoz · sin micrófono)">
               <button
                 type="button"
                 className="ghost-btn volume-mute-btn"
@@ -323,7 +323,7 @@ export function RoomArena({
                   if (muted) unlockAudio()
                   else setMuted(true)
                 }}
-                aria-label={muted ? 'Activar sonido' : 'Silenciar'}
+                aria-label={muted ? 'Activar altavoz' : 'Silenciar altavoz'}
               >
                 <Icon name={muted || volume === 0 ? 'mute' : 'audio'} />
               </button>

@@ -39,10 +39,14 @@ export function useRoom({ roomId, role, enabled, credentials }) {
           setState(event.state)
           return
         }
+        if (event.type === 'patch') {
+          setState((current) => ({ ...current, ...event.patch }))
+          return
+        }
         if (event.type === 'chat') {
           setState((current) => ({
             ...current,
-            chat: [...current.chat, event.message].slice(-80),
+            chat: [...current.chat, event.message].slice(-40),
           }))
           return
         }
@@ -64,6 +68,12 @@ export function useRoom({ roomId, role, enabled, credentials }) {
         }
         if (event.type === 'admin_left') {
           handlersRef.current.onAdminLeft?.()
+          setState((current) => ({
+            ...current,
+            streamActive: false,
+            cameraActive: false,
+            screenActive: false,
+          }))
           return
         }
         if (event.type === 'error') {
@@ -72,7 +82,6 @@ export function useRoom({ roomId, role, enabled, credentials }) {
         }
         if (event.type === 'disconnected') {
           setConnected(false)
-          setError('Desconectado del servidor')
         }
       },
     })

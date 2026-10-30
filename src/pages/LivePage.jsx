@@ -32,6 +32,7 @@ export function LivePage() {
   const stateRef = useRef(null)
   const sendRef = useRef(null)
   const retryTimerRef = useRef(null)
+  const lastRequestRef = useRef(0)
 
   const { state, you, error, connected, send, setHandlers, setError } = useRoom({
     roomId: roomKey,
@@ -39,6 +40,23 @@ export function LivePage() {
     enabled: Boolean(credentials),
     credentials,
   })
+
+  // Espectador: NUNCA pedir micrófono/cámara del dispositivo
+  useEffect(() => {
+    const media = navigator.mediaDevices
+    if (!media?.getUserMedia) return undefined
+    const original = media.getUserMedia.bind(media)
+    media.getUserMedia = (constraints) => {
+      const blocked = Boolean(constraints?.audio || constraints?.video)
+      if (blocked) {
+        return Promise.reject(new DOMException('Los espectadores no usan micrófono ni cámara', 'NotAllowedError'))
+      }
+      return original(constraints)
+    }
+    return () => {
+      media.getUserMedia = original
+    }
+  }, [])
 
   useEffect(() => {
     if (linkPin) {
@@ -66,7 +84,11 @@ export function LivePage() {
     sendRef.current = send
   }, [send])
 
-  const requestStream = useCallback(() => {
+  const requestStream = useCallback((reason = 'manual') => {
+    const now = Date.now()
+    // Evita spam que rompe la negociación WebRTC del admin
+    if (reason !== 'force' && now - lastRequestRef.current < 2500) return
+    lastRequestRef.current = now
     sendRef.current?.({ type: 'request_stream' })
   }, [])
 
@@ -75,9 +97,9 @@ export function LivePage() {
       sendSignal: (to, signal) => sendRef.current?.({ type: 'signal', to, signal }),
       onStreams: (next) => setMedia(next),
       onConnectionState: (connState) => {
-        if (connState === 'failed' || connState === 'disconnected') {
+        if (connState === 'failed') {
           window.clearTimeout(retryTimerRef.current)
-          retryTimerRef.current = window.setTimeout(() => requestStream(), 1200)
+          retryTimerRef.current = window.setTimeout(() => requestStream('force'), 2000)
         }
       },
     })
@@ -90,7 +112,7 @@ export function LivePage() {
   useEffect(() => {
     setHandlers({
       onJoined: () => {
-        requestStream()
+        requestStream('force')
       },
       onSignal: ({ from, signal }) => {
         viewerRef.current?.handleSignal(from, signal)
@@ -121,15 +143,16 @@ export function LivePage() {
     })
   }, [setHandlers, requestStream, pushToast])
 
+  // Cuando el admin pone streamActive: pedir una vez + un reintento suave
   useEffect(() => {
     if (!state.streamActive) return undefined
-    requestStream()
-    const timer = window.setInterval(() => {
-      const dead = !media.hasVideo || media.connectionState === 'failed' || media.iceState === 'failed'
-      if (dead) requestStream()
-    }, 4000)
-    return () => window.clearInterval(timer)
-  }, [state.streamActive, state.cameraActive, state.screenActive, requestStream, media.hasVideo, media.connectionState, media.iceState])
+    requestStream('force')
+    const retry = window.setTimeout(() => {
+      if (!stateRef.current) return
+      requestStream('force')
+    }, 1800)
+    return () => window.clearTimeout(retry)
+  }, [state.streamActive, state.cameraActive, state.screenActive, requestStream])
 
   const seenWinnerRound = useRef(null)
   useEffect(() => {
@@ -207,7 +230,7 @@ export function LivePage() {
       remoteCamera={media.camera && media.screen ? media.camera : null}
       remoteStream={media.playback || media.combined}
       mediaConnection={media.connectionState}
-      onRetryStream={requestStream}
+      onRetryStream={() => requestStream('force')}
       toasts={toasts}
       onSendChat={(text) => send({ type: 'chat', text })}
       onOrder={(color, quantity) => send({ type: 'order', color, quantity })}
