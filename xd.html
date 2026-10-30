@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yazmin y sus Amigas - Demo Panel En Vivo</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'sans-serif'],
+            display: ['Space Grotesk', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              purple: '#9d4edd',
+              magenta: '#f72585',
+              pink: '#ff007f',
+              gold: '#ffb703',
+              cyan: '#4cc9f0',
+              dark: '#0f0a1c',
+              card: '#1a122e'
+            }
+          },
+          boxShadow: {
+            neon: '0 0 15px rgba(247, 37, 133, 0.5), 0 0 30px rgba(157, 78, 221, 0.3)',
+            gold: '0 0 15px rgba(255, 183, 3, 0.5)',
+            cyan: '0 0 15px rgba(76, 201, 240, 0.5)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom CSS Effects */
+    .bg-grid-pattern {
+      background-size: 30px 30px;
+      background-image: 
+        linear-gradient(to right, rgba(157, 78, 221, 0.08) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(157, 78, 221, 0.08) 1px, transparent 1px);
+    }
+    .text-glow {
+      text-shadow: 0 0 10px rgba(247, 37, 133, 0.7);
+    }
+    .text-glow-gold {
+      text-shadow: 0 0 10px rgba(255, 183, 3, 0.8);
+    }
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f0a1c;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #3c096c;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #f72585;
+    }
+  </style>
+</head>
+<body class="h-full bg-slate-950 font-sans selection:bg-brand-magenta selection:text-white flex flex-col antialiased overflow-x-hidden bg-grid-pattern">
+
+  <!-- ========================================== -->
+  <!-- 1. AUTH / PIN MODAL SCREEN -->
+  <!-- ========================================== -->
+  <div id="pinModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+    <div class="w-full max-w-md bg-brand-card border-2 border-brand-purple/50 rounded-3xl p-6 md:p-8 shadow-neon text-center relative overflow-hidden">
+      
+      <!-- Decorative Glow -->
+      <div class="absolute -top-10 -left-10 w-32 h-32 bg-brand-magenta/30 rounded-full blur-2xl"></div>
+      <div class="absolute -bottom-10 -right-10 w-32 h-32 bg-brand-purple/30 rounded-full blur-2xl"></div>
+
+      <div class="relative z-10">
+        <!-- Logo Header -->
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-magenta to-brand-purple text-white mb-4 shadow-lg">
+          <i class="fa-solid font-bold text-3xl fa-dice"></i>
+        </div>
+        <h1 class="font-display text-2xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-brand-magenta via-purple-300 to-brand-gold uppercase tracking-wider">
+          Yazmin y sus Amigas
+        </h1>
+        <p class="text-slate-400 text-sm mt-1 mb-6">Panel Interactivo En Vivo • Ingrese PIN de Administrador</p>
+
+        <!-- PIN Display -->
+        <div class="flex justify-center gap-3 mb-6">
+          <input type="password" maxlength="1" readonly class="pin-digit w-12 h-14 text-2xl font-bold text-center bg-slate-900 border-2 border-brand-purple/40 rounded-xl focus:border-brand-magenta focus:outline-none transition">
+          <input type="password" maxlength="1" readonly class="pin-digit w-12 h-14 text-2xl font-bold text-center bg-slate-900 border-2 border-brand-purple/40 rounded-xl focus:border-brand-magenta focus:outline-none transition">
+          <input type="password" maxlength="1" readonly class="pin-digit w-12 h-14 text-2xl font-bold text-center bg-slate-900 border-2 border-brand-purple/40 rounded-xl focus:border-brand-magenta focus:outline-none transition">
+          <input type="password" maxlength="1" readonly class="pin-digit w-12 h-14 text-2xl font-bold text-center bg-slate-900 border-2 border-brand-purple/40 rounded-xl focus:border-brand-magenta focus:outline-none transition">
+        </div>
+
+        <p id="pinErrorMsg" class="text-rose-400 text-xs font-semibold h-4 mb-3 opacity-0 transition-opacity">PIN incorrecto. Intente '1234'</p>
+
+        <!-- Numeric Keypad -->
+        <div class="grid grid-cols-3 gap-3 max-w-xs mx-auto mb-5">
+          <button onclick="appendPin('1')" class="py-3 bg-slate-900/80 hover:bg-brand-purple/40 active:scale-95 text-xl font-bold rounded-xl border border-slate-800 transition">1</button>
+          <button onclick="appendPin('2')" class="py-3 bg-slate-900/80 hover:bg-brand-purple/40 active:scale-95 text-xl font-bold rounded-xl border border-slate-800 transition">2</button>
+          <button onclick="appendPin('3')" class="py-3 bg-slate-900/80 hover:bg-brand-purple/40 active:scale-95 text-xl font-bold rounded-xl border border-slate-800 transition">3</button>
+          <button onclick="appendPin('4')" class="py-3 bg-slate-900/80 hover:bg-brand-purple/40 active:scale-95 text-xl font-bold rounded-xl border border-slate-800 transition">4</button>
+          <button onclick="appendPin('5')" class="py-3 bg-slate-900/80 hover:bg-brand-purple/40 active:scale-95 text-xl font-bold rounded-xl border border-slate-800 transition">5</button>
+          <button onclick="appendPin('6')" class="py-3 bg-slate-900/80 hover:bg-brand-purple/40 active:scale-95 text-xl font-bold rounded-xl border border-slate-800 transition">6</button>
+          <button onclick="appendPin('7')" class="py-3 bg-slate-900/80 hover:bg-brand-purple/40 active:scale-95 text-xl font-bold rounded-xl border border-slate-800 transition">7</button>
+          <button onclick="appendPin('8')" class="py-3 bg-slate-900/80 hover:bg-brand-purple/40 active:scale-95 text-xl font-bold rounded-xl border border-slate-800 transition">8</button>
+          <button onclick="appendPin('9')" class="py-3 bg-slate-900/80 hover:bg-brand-purple/40 active:scale-95 text-xl font-bold rounded-xl border border-slate-800 transition">9</button>
+          <button onclick="clearPin()" class="py-3 bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 active:scale-95 text-sm font-bold rounded-xl border border-rose-900/50 transition">BORRAR</button>
+          <button onclick="appendPin('0')" class="py-3 bg-slate-900/80 hover:bg-brand-purple/40 active:scale-95 text-xl font-bold rounded-xl border border-slate-800 transition">0</button>
+          <button onclick="submitPin()" class="py-3 bg-brand-magenta hover:bg-pink-600 text-white active:scale-95 text-sm font-bold rounded-xl shadow-lg shadow-brand-magenta/30 transition">OK</button>
+        </div>
+
+        <!-- Quick Demo Unlock Bypass Button -->
+        <button onclick="bypassPin()" class="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-lg transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-bolt text-yellow-300"></i> Acceso Rápido Demo (1234)
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- MAIN APP CONTAINER -->
+  <!-- ========================================== -->
+  <div id="appContainer" class="flex-1 flex flex-col min-h-screen opacity-20 pointer-events-none transition-all duration-500">
+    
+    <!-- 2. HEADER DASHBOARD -->
+    <header class="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-md border-b border-brand-purple/30 px-4 py-3">
+      <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+        
+        <!-- Brand & Live Indicator -->
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2 bg-rose-950/60 border border-rose-500/50 px-3 py-1.5 rounded-full">
+            <span class="relative flex h-3 w-3">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+            </span>
+            <span class="text-xs font-black tracking-wider text-rose-300 uppercase">EN LIVE</span>
+          </div>
+          <div>
+            <h1 class="font-display font-black text-lg md:text-xl text-white tracking-wide">YAZMIN Y SUS AMIGAS</h1>
+            <p class="text-[10px] md:text-xs text-slate-400 flex items-center gap-1">
+              <i class="fa-solid fa-users text-brand-cyan"></i> <span id="viewersCount">1,420</span> Jugadores conectados
+            </p>
+          </div>
+        </div>
+
+        <!-- Multipliers & Controls -->
+        <div class="flex items-center gap-2 md:gap-4 flex-wrap">
+          
+          <!-- Multiplier Selector -->
+          <div class="bg-slate-900 border border-brand-purple/40 p-1 rounded-2xl flex items-center gap-1">
+            <span class="text-[10px] font-bold text-slate-400 px-2 uppercase hidden sm:inline">Mult:</span>
+            <button onclick="setMultiplier(1)" id="btnMult1" class="mult-btn px-3 py-1 rounded-xl text-xs font-black transition bg-brand-purple text-white shadow-md">X1</button>
+            <button onclick="setMultiplier(2)" id="btnMult2" class="mult-btn px-3 py-1 rounded-xl text-xs font-black transition text-slate-300 hover:text-white">X2</button>
+            <button onclick="setMultiplier(5)" id="btnMult5" class="mult-btn px-3 py-1 rounded-xl text-xs font-black transition text-slate-300 hover:text-white">X5</button>
+            <button onclick="setMultiplier(10)" id="btnMult10" class="mult-btn px-3 py-1 rounded-xl text-xs font-black transition text-slate-300 hover:text-white">X10</button>
+          </div>
+
+          <!-- Mochila / Inventory Toggle Button -->
+          <button onclick="toggleMochilaModal()" class="relative bg-gradient-to-r from-amber-500 to-brand-gold hover:from-amber-400 hover:to-yellow-400 text-slate-950 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow-gold flex items-center gap-2 transition active:scale-95">
+            <i class="fa-solid fa-briefcase text-base"></i>
+            <span>Mochila</span>
+            <span id="mochilaBadge" class="bg-slate-950 text-brand-gold text-[10px] px-1.5 py-0.5 rounded-full font-bold">0</span>
+          </button>
+
+          <!-- Quick Options Trigger Modal Morado -->
+        <button onclick="openMoradoModal()" class="bg-brand-purple/30 hover:bg-brand-purple/50 border border-brand-purple text-purple-200 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-lock text-brand-magenta"></i>
+          <span class="hidden md:inline">Opciones Morado</span>
+        </button>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN GAME BODY -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    
+    <!-- LEFT / CENTER COLUMN: GAME MATRIX (8 Cols) -->
+    <section class="lg:col-span-8 flex flex-col gap-4">
+      
+      <!-- LIVE SCREEN TRANSMISSION / PC SCREEN SHARE PANEL -->
+      <div id="screenShareContainer" class="bg-brand-card/90 border-2 border-brand-magenta/50 rounded-3xl p-4 shadow-neon relative overflow-hidden">
+        <!-- Panel Header -->
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></span>
+            <h2 class="font-display font-bold text-slate-100 text-sm md:text-base flex items-center gap-2">
+              <i class="fa-solid fa-desktop text-brand-cyan"></i> Transmisión en Vivo de Pantalla PC
+            </h2>
+          </div>
+          
+          <div id="screenStats" class="text-[10px] font-mono text-slate-400 hidden sm:flex items-center gap-3">
+            <span id="screenRes" class="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">0x0</span>
+            <span id="audioStatus" class="bg-slate-900 px-2 py-0.5 rounded border border-slate-800 text-slate-500">
+              <i class="fa-solid fa-volume-xmark"></i> Sin Audio
+            </span>
+          </div>
+        </div>
+
+        <!-- Video Player Viewport Container -->
+        <div id="videoViewport" class="relative w-full aspect-video bg-slate-950 rounded-2xl border border-slate-800/80 overflow-hidden flex items-center justify-center group">
+          
+          <!-- Empty State Display -->
+          <div id="videoPlaceholder" class="text-center p-6 flex flex-col items-center justify-center">
+            <div class="w-16 h-16 rounded-2xl bg-brand-purple/20 border border-brand-purple/40 flex items-center justify-center text-brand-purple text-3xl mb-3 shadow-lg">
+              <i class="fa-solid fa-display"></i>
+            </div>
+            <h3 class="font-display font-bold text-slate-200 text-sm md:text-base">Sin transmisión activa</h3>
+            <p class="text-xs text-slate-400 mt-1 max-w-sm">Haz clic en "Iniciar Transmisión" para seleccionar tu pantalla, ventana o pestaña y transmitirla en vivo al panel.</p>
+          </div>
+
+          <!-- Live Screen Video Element -->
+          <video id="screenVideo" autoplay playsinline class="w-full h-full object-contain hidden bg-black"></video>
+
+          <!-- Overlay Live Badge -->
+          <div id="liveBadge" class="absolute top-3 left-3 bg-rose-600/90 text-white font-black text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider shadow-lg hidden items-center gap-1.5 backdrop-blur-sm">
+            <span class="w-2 h-2 rounded-full bg-white animate-ping"></span> TRANSMITIENDO PANTALLA
+          </div>
+
+          <!-- Video Hover Controls Bar -->
+          <div id="videoControlsBar" class="absolute bottom-0 inset-x-0 bg-slate-950/80 backdrop-blur-md p-2.5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between text-xs hidden">
+            <span class="text-[11px] text-slate-300 font-semibold truncate px-2"><i class="fa-solid fa-circle text-emerald-400 text-[8px] mr-1"></i> Transmitiendo</span>
+            <div class="flex items-center gap-2">
+              <button onclick="togglePiP()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition" title="Picture in Picture">
+                <i class="fa-solid fa-window-restore"></i> PiP
+              </button>
+              <button onclick="toggleFullscreen()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition" title="Pantalla Completa">
+                <i class="fa-solid fa-expand"></i> Fullscreen
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Control Buttons -->
+        <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <button id="btnStartScreen" onclick="startScreenShare()" class="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Iniciar Transmisión
+            </button>
+            <button id="btnStopScreen" onclick="stopScreenShare()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg transition hidden flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-stop"></i> Detener Transmisión
+            </button>
+          </div>
+
+          <p class="text-[11px] text-slate-400 italic">
+            * Soporta la captura del audio del sistema si seleccionas compartir pestaña/pantalla con audio.
+          </p>
+        </div>
+      </div>
+
+      <!-- Action Toolbar -->
+      <div class="bg-brand-card border border-brand-purple/30 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+          <div>
+            <h2 class="font-display font-bold text-slate-100 text-base md:text-lg flex items-center gap-2">
+              <i class="fa-solid fa-grip text-brand-magenta"></i> Tablero del Bingo / Sorteo
+            </h2>
+            <p class="text-xs text-slate-400">Haz clic en los casilleros para gestionar estados y canjes en vivo</p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button onclick="openCanjesModal()" class="px-3.5 py-2 bg-gradient-to-r from-brand-magenta to-pink-600 hover:opacity-90 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-neon transition flex items-center gap-2">
+              <i class="fa-solid fa-gift"></i> 🎁 Canjes
+            </button>
+            <button onclick="resetGrid()" class="px-3 py-2 bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-300 rounded-xl text-xs font-semibold transition">
+              <i class="fa-solid fa-rotate-right"></i> Reiniciar
+            </button>
+          </div>
+        </div>
+
+        <!-- Dynamic Grid Matrix Board -->
+        <div class="bg-brand-card/90 border-2 border-brand-purple/40 rounded-3xl p-3 sm:p-5 shadow-2xl relative">
+          
+          <!-- Board Legend -->
+          <div class="flex flex-wrap items-center justify-between text-xs text-slate-300 mb-4 px-1 gap-2 border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-4 flex-wrap">
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500"></span> Libre</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-brand-purple"></span> Morado</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500"></span> Reclamado</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-rose-600"></span> VAR / Pendiente</span>
+            </div>
+            <div class="text-[11px] font-mono text-brand-gold font-bold">
+              Multiplicador Activo: <span id="currentMultDisplay" class="text-white bg-slate-900 px-2 py-0.5 rounded-md border border-amber-500/40">X1</span>
+            </div>
+          </div>
+
+          <!-- 6x6 Grid Slot Layout (36 Slots) -->
+          <div id="gameGrid" class="grid grid-cols-4 sm:grid-cols-6 gap-2 sm:gap-3">
+            <!-- Grid tiles will be injected dynamically by JavaScript -->
+          </div>
+
+        </div>
+
+        <!-- Live Activity Log Stream -->
+        <div class="bg-brand-card border border-brand-purple/30 rounded-2xl p-4 shadow-lg">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-wifi text-emerald-400"></i> Feed en vivo de la Sala
+          </h3>
+          <div id="activityFeed" class="space-y-2 max-h-32 overflow-y-auto text-xs pr-1 font-mono">
+            <!-- Activity log entries inserted dynamically -->
+          </div>
+        </div>
+
+      </section>
+
+      <!-- RIGHT COLUMN: VAR QUEUE & LEADERBOARD (4 Cols) -->
+      <section class="lg:col-span-4 flex flex-col gap-6">
+        
+        <!-- 4. VAR QUEUE (Fila VAR / Orden Exacto de Llegada) -->
+        <div class="bg-brand-card border-2 border-rose-500/40 rounded-3xl p-4 md:p-5 shadow-lg relative flex flex-col h-full max-h-[500px]">
+          
+          <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/60 flex items-center justify-center text-rose-400 font-bold">
+                <i class="fa-solid fa-video"></i>
+              </div>
+              <div>
+                <h3 class="font-display font-bold text-slate-100 text-sm md:text-base">Fila VAR (Reclamos)</h3>
+                <p class="text-[10px] text-slate-400">Orden exacto de llegada</p>
+              </div>
+            </div>
+            <button onclick="clearVarQueue()" class="text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-400 px-2.5 py-1 rounded-lg border border-slate-800">
+              Limpiar
+            </button>
+          </div>
+
+          <!-- Queue List -->
+          <div id="varQueueContainer" class="flex-1 overflow-y-auto space-y-2 pr-1 my-1">
+            <!-- VAR Queue items dynamically populated -->
+          </div>
+
+          <!-- Queue Summary Info -->
+          <div class="mt-3 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400 flex justify-between items-center">
+            <span>Pendientes en cola: <strong id="varCount" class="text-rose-400 font-bold">0</strong></span>
+            <span class="text-slate-500"><i class="fa-solid fa-clock text-[10px]"></i> Precisión ms</span>
+          </div>
+
+        </div>
+
+        <!-- LEADERBOARD / JUGADORES Y PUNTOS -->
+        <div class="bg-brand-card border border-brand-purple/30 rounded-3xl p-4 md:p-5 shadow-lg">
+          <div class="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+            <h3 class="font-display font-bold text-slate-200 text-sm flex items-center gap-2">
+              <i class="fa-solid fa-trophy text-brand-gold"></i> Jugadores y Puntos
+            </h3>
+            <span class="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded-full border border-slate-800">Top Top</span>
+          </div>
+
+          <div id="playersTable" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+            <!-- Dynamic player points injected here -->
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- 5. INTERACTIVE MODALS -->
+  <!-- ========================================== -->
+
+  <!-- MODAL MORADO: Opción para cerrar espacios libres -->
+  <div id="moradoModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+    <div class="w-full max-w-md bg-brand-card border-2 border-brand-purple rounded-3xl p-6 shadow-neon relative">
+      <button onclick="closeMoradoModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="text-center mb-6">
+        <div class="w-14 h-14 bg-brand-purple/30 border border-brand-purple rounded-2xl flex items-center justify-center text-brand-purple text-2xl mx-auto mb-3">
+          <i class="fa-solid fa-lock"></i>
+        </div>
+        <h3 class="font-display text-xl font-bold text-white">Configuración Modo MORADO</h3>
+        <p class="text-xs text-slate-400 mt-1">Bloqueo y protección de casilleros en directo</p>
+      </div>
+
+      <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 mb-6 text-sm text-slate-300 space-y-3">
+        <p class="font-semibold text-purple-300">¿Cerrar espacios libres automáticamente?</p>
+        <p class="text-xs text-slate-400">Esta acción cambiará el estado de todos los casilleros libres a casilleros en modo "Morado Protegido".</p>
+      </div>
+
+      <div class="flex gap-3">
+        <button onclick="closeMoradoModal()" class="flex-1 py-2.5 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-300 text-xs font-bold uppercase rounded-xl transition">
+          Cancelar
+        </button>
+        <button onclick="confirmCerrarEspacios()" class="flex-1 py-2.5 bg-brand-purple hover:bg-purple-600 text-white text-xs font-bold uppercase rounded-xl shadow-lg shadow-purple-600/30 transition">
+          Cerrar Libres
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- MODAL CANJES Y SELECCIÓN DE COLOR / PUNTOS -->
+  <div id="canjesModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+    <div class="w-full max-w-lg bg-brand-card border-2 border-brand-magenta rounded-3xl p-6 shadow-neon relative max-h-[90vh] overflow-y-auto">
+      <button onclick="closeCanjesModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="text-center mb-5">
+        <h3 class="font-display text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-brand-magenta via-pink-400 to-brand-gold uppercase tracking-wider">
+          🎁 CANJES 🎁
+        </h3>
+        <p class="text-xs text-slate-400 mt-1">Intercambio de ColorChips y Recompensas de Puntos</p>
+      </div>
+
+      <!-- Color Chips Selection Grid -->
+      <div class="mb-6">
+        <label class="block text-xs font-bold uppercase text-slate-300 mb-2">1. Seleccionar Chip de Color:</label>
+        <div class="grid grid-cols-4 gap-2">
+          <button onclick="selectColorChip('purple', 'Morado')" class="color-chip-btn p-3 bg-slate-900 rounded-xl border border-purple-500/50 hover:bg-purple-950 text-center transition">
+            <div class="w-6 h-6 rounded-full bg-brand-purple mx-auto mb-1"></div>
+            <span class="text-[10px] font-bold block text-purple-300">Morado</span>
+          </button>
+          <button onclick="selectColorChip('gold', 'Dorado')" class="color-chip-btn p-3 bg-slate-900 rounded-xl border border-amber-500/50 hover:bg-amber-950 text-center transition">
+            <div class="w-6 h-6 rounded-full bg-brand-gold mx-auto mb-1"></div>
+            <span class="text-[10px] font-bold block text-amber-300">Dorado</span>
+          </button>
+          <button onclick="selectColorChip('cyan', 'Celeste')" class="color-chip-btn p-3 bg-slate-900 rounded-xl border border-cyan-500/50 hover:bg-cyan-950 text-center transition">
+            <div class="w-6 h-6 rounded-full bg-brand-cyan mx-auto mb-1"></div>
+            <span class="text-[10px] font-bold block text-cyan-300">Celeste</span>
+          </button>
+          <button onclick="selectColorChip('magenta', 'Fucsia')" class="color-chip-btn p-3 bg-slate-900 rounded-xl border border-pink-500/50 hover:bg-pink-950 text-center transition">
+            <div class="w-6 h-6 rounded-full bg-brand-magenta mx-auto mb-1"></div>
+            <span class="text-[10px] font-bold block text-pink-300">Fucsia</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Custom Points Form -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 mb-6 space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1">Jugador Beneficiario:</label>
+          <select id="canjePlayerSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-magenta">
+            <!-- Options added by JS -->
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1">Puntos a Canjear / Asignar:</label>
+          <div class="flex items-center gap-2">
+            <input type="number" id="canjePointsInput" value="500" min="50" step="50" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 font-bold focus:outline-none focus:border-brand-magenta">
+            <button onclick="addPresetPoints(100)" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 rounded-xl">+100</button>
+            <button onclick="addPresetPoints(500)" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 rounded-xl">+500</button>
+          </div>
+        </div>
+      </div>
+
+      <button onclick="executeCanje()" class="w-full py-3 bg-gradient-to-r from-brand-magenta to-brand-purple hover:opacity-90 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-neon transition">
+        Confirmar Canje de Puntos
+      </button>
+
+    </div>
+  </div>
+
+
+  <!-- MODAL MOCHILA / INVENTARIO -->
+  <div id="mochilaModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+    <div class="w-full max-w-md bg-brand-card border-2 border-brand-gold rounded-3xl p-6 shadow-gold relative">
+      <button onclick="toggleMochilaModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="flex items-center gap-3 mb-5 border-b border-slate-800 pb-3">
+        <div class="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-brand-gold text-xl">
+          <i class="fa-solid fa-briefcase"></i>
+        </div>
+        <div>
+          <h3 class="font-display text-xl font-bold text-white">Mochila del En Vivo</h3>
+          <p class="text-xs text-slate-400">Resumen de Premios e Inventario Reclamado</p>
+        </div>
+      </div>
+
+      <div id="mochilaContent" class="space-y-3 max-h-60 overflow-y-auto mb-6 pr-1">
+        <!-- Backpack items rendered here -->
+      </div>
+
+      <button onclick="toggleMochilaModal()" class="w-full py-2.5 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-300 font-bold text-xs uppercase rounded-xl transition">
+        Cerrar Mochila
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ========================================== -->
+  <!-- JAVASCRIPT REVERSE ENGINEERED ENGINE -->
+  <!-- ========================================== -->
+  <script>
+    // --- APP STATE ---
+    let pinInput = "";
+    const DEFAULT_PIN = "1234";
+    let isUnlocked = false;
+
+    let currentMultiplier = 1;
+    let selectedColorChip = { id: 'purple', name: 'Morado' };
+
+    // Grid State (36 Slots)
+    let gridSlots = Array.from({ length: 36 }, (_, i) => ({
+      id: i + 1,
+      status: i % 7 === 0 ? 'morado' : i % 5 === 0 ? 'claimed' : 'free', // 'free', 'morado', 'claimed', 'var'
+      claimedBy: i % 5 === 0 ? 'Camila_Live' : null,
+      multiplier: 1
+    }));
+
+    // Mock Players
+    let players = [
+      { id: 1, name: "Camila_Live", points: 1250, badge: "VIP" },
+      { id: 2, name: "Sofia_Gamer", points: 890, badge: "PRO" },
+      { id: 3, name: "Lucia_Perez", points: 640, badge: "NEW" },
+      { id: 4, name: "Valeria_99", points: 410, badge: "FAN" },
+      { id: 5, name: "Mateo_X", points: 200, badge: "FAN" }
+    ];
+
+    // VAR Queue (Precise Arrival)
+    let varQueue = [
+      { id: 'var-101', slotId: 12, player: 'Sofia_Gamer', timestamp: new Date(Date.now() - 45000) },
+      { id: 'var-102', slotId: 24, player: 'Lucia_Perez', timestamp: new Date(Date.now() - 12000) }
+    ];
+
+    // Mochila Inventory
+    let mochilaItems = [
+      { id: 1, title: "Chip Morado x2", type: "Premio Especial", time: "Hace 5m" },
+      { id: 2, title: "Bono +500 Puntos", type: "Canje Directo", time: "Hace 12m" }
+    ];
+
+    // Screen Share Stream Reference
+    let screenStream = null;
+
+    // --- INITIALIZATION ---
+    window.onload = function() {
+      renderGrid();
+      renderVarQueue();
+      renderPlayers();
+      renderMochila();
+      populateCanjePlayers();
+      initSimulatedLiveFeed();
+    };
+
+
+    // --- SCREEN SHARE TRANSMISSION API ---
+    async function startScreenShare() {
+      try {
+        // Request Screen Capture from Browser Standard API
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            cursor: "always"
+          },
+          audio: true
+        });
+
+        const videoElem = document.getElementById('screenVideo');
+        const placeholder = document.getElementById('videoPlaceholder');
+        const liveBadge = document.getElementById('liveBadge');
+        const controlsBar = document.getElementById('videoControlsBar');
+        const btnStart = document.getElementById('btnStartScreen');
+        const btnStop = document.getElementById('btnStopScreen');
+
+        // Attach MediaStream to Video Element
+        videoElem.srcObject = screenStream;
+        
+        placeholder.classList.add('hidden');
+        videoElem.classList.remove('hidden');
+        liveBadge.classList.remove('hidden');
+        liveBadge.classList.add('flex');
+        controlsBar.classList.remove('hidden');
+
+        btnStart.classList.add('hidden');
+        btnStop.classList.remove('hidden');
+
+        // Monitor stream tracks end event (e.g. user stops via browser bar)
+        const videoTrack = screenStream.getVideoTracks()[0];
+        if (videoTrack) {
+          videoTrack.onended = () => {
+            stopScreenShare();
+          };
+
+          // Update resolution UI once settings are available
+          const settings = videoTrack.getSettings();
+          if (settings.width && settings.height) {
+            document.getElementById('screenRes').innerText = `${settings.width}x${settings.height}`;
+          }
+        }
+
+        // Check captured audio tracks
+        const audioTrack = screenStream.getAudioTracks()[0];
+        const audioStatus = document.getElementById('audioStatus');
+        if (audioTrack) {
+          audioStatus.innerHTML = `<i class="fa-solid fa-volume-high text-emerald-400"></i> Audio Activo`;
+          audioStatus.classList.remove('text-slate-500');
+          audioStatus.classList.add('text-emerald-400');
+        } else {
+          audioStatus.innerHTML = `<i class="fa-solid fa-volume-xmark"></i> Sin Audio`;
+          audioStatus.classList.add('text-slate-500');
+          audioStatus.classList.remove('text-emerald-400');
+        }
+
+        addActivityLog("🖥️ Transmisión de pantalla de la PC iniciada en vivo.");
+      } catch (err) {
+        console.error("Error al iniciar captura de pantalla:", err);
+        addActivityLog("⚠️ No se pudo iniciar la transmisión de pantalla.");
+      }
+    }
+
+    function stopScreenShare() {
+      if (screenStream) {
+        screenStream.getTracks().forEach(track => track.stop());
+        screenStream = null;
+      }
+
+      const videoElem = document.getElementById('screenVideo');
+      const placeholder = document.getElementById('videoPlaceholder');
+      const liveBadge = document.getElementById('liveBadge');
+      const controlsBar = document.getElementById('videoControlsBar');
+      const btnStart = document.getElementById('btnStartScreen');
+      const btnStop = document.getElementById('btnStopScreen');
+
+      videoElem.srcObject = null;
+      videoElem.classList.add('hidden');
+      placeholder.classList.remove('hidden');
+      liveBadge.classList.add('hidden');
+      liveBadge.classList.remove('flex');
+      controlsBar.classList.add('hidden');
+
+      btnStart.classList.remove('hidden');
+      btnStop.classList.add('hidden');
+
+      document.getElementById('screenRes').innerText = '0x0';
+      document.getElementById('audioStatus').innerHTML = `<i class="fa-solid fa-volume-xmark"></i> Sin Audio`;
+      document.getElementById('audioStatus').classList.add('text-slate-500');
+
+      addActivityLog("🛑 Transmisión de pantalla detenida.");
+    }
+
+    function toggleFullscreen() {
+      const viewport = document.getElementById('videoViewport');
+      if (!document.fullscreenElement) {
+        if (viewport.requestFullscreen) {
+          viewport.requestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    async function togglePiP() {
+      const videoElem = document.getElementById('screenVideo');
+      try {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+        } else if (document.pictureInPictureEnabled && !videoElem.paused) {
+          await videoElem.requestPictureInPicture();
+        }
+      } catch (err) {
+        console.error("Error al activar Picture-in-Picture:", err);
+      }
+    }
+
+
+    // --- 1. AUTH / PIN SYSTEM ---
+    function appendPin(num) {
+      if (pinInput.length < 4) {
+        pinInput += num;
+        updatePinUI();
+      }
+      if (pinInput.length === 4) {
+        setTimeout(submitPin, 200);
+      }
+    }
+
+    function clearPin() {
+      pinInput = "";
+      updatePinUI();
+      document.getElementById('pinErrorMsg').classList.add('opacity-0');
+    }
+
+    function updatePinUI() {
+      const inputs = document.querySelectorAll('.pin-digit');
+      inputs.forEach((input, idx) => {
+        input.value = pinInput[idx] ? "•" : "";
+      });
+    }
+
+    function submitPin() {
+      if (pinInput === DEFAULT_PIN) {
+        unlockApp();
+      } else {
+        const errorMsg = document.getElementById('pinErrorMsg');
+        errorMsg.classList.remove('opacity-0');
+        clearPin();
+      }
+    }
+
+    function bypassPin() {
+      pinInput = "1234";
+      unlockApp();
+    }
+
+    function unlockApp() {
+      isUnlocked = true;
+      const modal = document.getElementById('pinModal');
+      const app = document.getElementById('appContainer');
+
+      modal.classList.add('opacity-0', 'pointer-events-none');
+      setTimeout(() => modal.remove(), 300);
+
+      app.classList.remove('opacity-20', 'pointer-events-none');
+      addActivityLog("🔑 Sistema desbloqueado por Administrador.");
+    }
+
+
+    // --- 2. GRID MATRIX MANAGEMENT ---
+    function renderGrid() {
+      const gridContainer = document.getElementById('gameGrid');
+      gridContainer.innerHTML = '';
+
+      gridSlots.forEach(slot => {
+        const slotEl = document.createElement('div');
+        slotEl.className = `relative aspect-square rounded-2xl flex flex-col items-center justify-center p-2 cursor-pointer font-bold transition-all transform hover:scale-105 select-none border-2 ${getSlotStyle(slot.status)}`;
+
+        slotEl.onclick = () => handleSlotClick(slot.id);
+
+        slotEl.innerHTML = `
+          <span class="text-xs opacity-60 absolute top-1.5 left-2 font-mono">#${slot.id}</span>
+          <span class="text-lg md:text-xl font-black">${getSlotContent(slot)}</span>
+          ${slot.claimedBy ? `<span class="text-[9px] truncate max-w-[80%] opacity-80 mt-0.5">${slot.claimedBy}</span>` : ''}
+          ${slot.status === 'var' ? `<span class="absolute bottom-1 right-1 bg-rose-600 text-white text-[8px] px-1 rounded uppercase font-black tracking-widest animate-pulse">VAR</span>` : ''}
+        `;
+
+        gridContainer.appendChild(slotEl);
+      });
+    }
+
+    function getSlotStyle(status) {
+      switch (status) {
+        case 'morado':
+          return 'bg-brand-purple/20 border-brand-purple text-purple-300 shadow-neon';
+        case 'claimed':
+          return 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-gold';
+        case 'var':
+          return 'bg-rose-950/80 border-rose-500 text-rose-300 animate-pulse';
+        default: // free
+          return 'bg-slate-900/80 border-slate-800 hover:border-brand-purple/60 text-slate-300';
+      }
+    }
+
+    function getSlotContent(slot) {
+      switch (slot.status) {
+        case 'morado':
+          return '<i class="fa-solid fa-shield-halved text-brand-purple"></i>';
+        case 'claimed':
+          return '<i class="fa-solid fa-crown text-brand-gold"></i>';
+        case 'var':
+          return '<i class="fa-solid fa-eye text-rose-400"></i>';
+        default:
+          return slot.id;
+      }
+    }
+
+    function handleSlotClick(id) {
+      const slot = gridSlots.find(s => s.id === id);
+      if (!slot) return;
+
+      // Cycle status: free -> morado -> var -> claimed -> free
+      if (slot.status === 'free') {
+        slot.status = 'morado';
+        addActivityLog(`🔒 Casillero #${id} marcado como MORADO`);
+      } else if (slot.status === 'morado') {
+        slot.status = 'var';
+        // Add to VAR Queue automatically
+        const randomPlayer = players[Math.floor(Math.random() * players.length)].name;
+        slot.claimedBy = randomPlayer;
+        addToVarQueue(id, randomPlayer);
+        addActivityLog(`⚠️ Reclamo enviado a VAR para casillero #${id} por ${randomPlayer}`);
+      } else if (slot.status === 'var') {
+        slot.status = 'claimed';
+        addActivityLog(`✅ Casillero #${id} reclamado exitosamente por ${slot.claimedBy}`);
+      } else {
+        slot.status = 'free';
+        slot.claimedBy = null;
+        addActivityLog(`🔄 Casillero #${id} liberado`);
+      }
+
+      renderGrid();
+    }
+
+    function resetGrid() {
+      gridSlots.forEach((slot, i) => {
+        slot.status = 'free';
+        slot.claimedBy = null;
+      });
+      renderGrid();
+      addActivityLog("🧹 Tablero reiniciado a estado inicial.");
+    }
+
+
+    // --- 3. MULTIPLIER CONTROL ---
+    function setMultiplier(val) {
+      currentMultiplier = val;
+      document.querySelectorAll('.mult-btn').forEach(btn => {
+        btn.classList.remove('bg-brand-purple', 'text-white', 'shadow-md');
+        btn.classList.add('text-slate-300');
+      });
+
+      const activeBtn = document.getElementById(`btnMult${val}`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-brand-purple', 'text-white', 'shadow-md');
+        activeBtn.classList.remove('text-slate-300');
+      }
+
+      document.getElementById('currentMultDisplay').innerText = `X${val}`;
+      addActivityLog(`⚡ Multiplicador cambiado a X${val}`);
+    }
+
+
+    // --- 4. VAR QUEUE SYSTEM ---
+    function addToVarQueue(slotId, playerName) {
+      varQueue.push({
+        id: `var-${Date.now()}`,
+        slotId: slotId,
+        player: playerName,
+        timestamp: new Date()
+      });
+      renderVarQueue();
+    }
+
+    function renderVarQueue() {
+      const container = document.getElementById('varQueueContainer');
+      const countEl = document.getElementById('varCount');
+      container.innerHTML = '';
+
+      countEl.innerText = varQueue.length;
+
+      if (varQueue.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-8 text-slate-500 text-xs">
+            <i class="fa-solid fa-circle-check text-2xl text-slate-700 mb-2 block"></i>
+            Sin reclamos pendientes en el VAR
+          </div>
+        `;
+        return;
+      }
+
+      varQueue.forEach((item, index) => {
+        const timeStr = item.timestamp.toLocaleTimeString('es-ES', { minute: '2-digit', second: '2-digit', fractionalSecondDigits: 2 });
+        const itemEl = document.createElement('div');
+        itemEl.className = "bg-slate-900 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between text-xs transition hover:border-rose-500/50";
+
+        itemEl.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-400 font-bold flex items-center justify-center text-[10px]">${index + 1}</span>
+            <div>
+              <div class="font-bold text-slate-200">#${item.slotId} - ${item.player}</div>
+              <div class="text-[9px] text-slate-500 font-mono">${timeStr}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <button onclick="approveVar('${item.id}', ${item.slotId})" class="p-1.5 bg-emerald-950/60 hover:bg-emerald-800 border border-emerald-600/40 text-emerald-400 rounded-lg transition" title="Aprobar">
+              <i class="fa-solid fa-check"></i>
+            </button>
+            <button onclick="rejectVar('${item.id}', ${item.slotId})" class="p-1.5 bg-rose-950/60 hover:bg-rose-800 border border-rose-600/40 text-rose-400 rounded-lg transition" title="Rechazar">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        `;
+
+        container.appendChild(itemEl);
+      });
+    }
+
+    function approveVar(varId, slotId) {
+      varQueue = varQueue.filter(item => item.id !== varId);
+      const slot = gridSlots.find(s => s.id === slotId);
+      if (slot) {
+        slot.status = 'claimed';
+      }
+      renderVarQueue();
+      renderGrid();
+      addActivityLog(`✅ Reclamo VAR aprobado para casillero #${slotId}`);
+    }
+
+    function rejectVar(varId, slotId) {
+      varQueue = varQueue.filter(item => item.id !== varId);
+      const slot = gridSlots.find(s => s.id === slotId);
+      if (slot) {
+        slot.status = 'free';
+        slot.claimedBy = null;
+      }
+      renderVarQueue();
+      renderGrid();
+      addActivityLog(`❌ Reclamo VAR rechazado para casillero #${slotId}`);
+    }
+
+    function clearVarQueue() {
+      varQueue = [];
+      renderVarQueue();
+    }
+
+
+    // --- 5. MODAL MORADO FUNCTIONS ---
+    function openMoradoModal() {
+      document.getElementById('moradoModal').classList.remove('hidden');
+    }
+
+    function closeMoradoModal() {
+      document.getElementById('moradoModal').classList.add('hidden');
+    }
+
+    function confirmCerrarEspacios() {
+      gridSlots.forEach(slot => {
+        if (slot.status === 'free') {
+          slot.status = 'morado';
+        }
+      });
+      renderGrid();
+      closeMoradoModal();
+      addActivityLog("🔒 Espacios libres cerrados en Modo MORADO.");
+    }
+
+
+    // --- 6. MODAL CANJES & PLAYERS ---
+    function openCanjesModal() {
+      document.getElementById('canjesModal').classList.remove('hidden');
+    }
+
+    function closeCanjesModal() {
+      document.getElementById('canjesModal').classList.add('hidden');
+    }
+
+    function selectColorChip(id, name) {
+      selectedColorChip = { id, name };
+      addActivityLog(`🎨 Color de Chip seleccionado: ${name}`);
+    }
+
+    function addPresetPoints(amount) {
+      const input = document.getElementById('canjePointsInput');
+      input.value = parseInt(input.value || 0) + amount;
+    }
+
+    function populateCanjePlayers() {
+      const select = document.getElementById('canjePlayerSelect');
+      select.innerHTML = '';
+      players.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.name;
+        option.innerText = `${p.name} (${p.points} Pts)`;
+        select.appendChild(option);
+      });
+    }
+
+    function executeCanje() {
+      const playerSelect = document.getElementById('canjePlayerSelect').value;
+      const points = parseInt(document.getElementById('canjePointsInput').value);
+
+      const player = players.find(p => p.name === playerSelect);
+      if (player && points) {
+        player.points += points;
+        renderPlayers();
+        populateCanjePlayers();
+
+        // Add item to mochila
+        mochilaItems.unshift({
+          id: Date.now(),
+          title: `Canje ${selectedColorChip.name} (+${points} Pts)`,
+          type: `Para ${player.name}`,
+          time: 'Ahora'
+        });
+        renderMochila();
+
+        addActivityLog(`🎁 CANJE REALIZADO: ${points} Pts asignados a ${player.name} (${selectedColorChip.name})`);
+        closeCanjesModal();
+      }
+    }
+
+    function renderPlayers() {
+      const table = document.getElementById('playersTable');
+      table.innerHTML = '';
+
+      players.sort((a, b) => b.points - a.points);
+
+      players.forEach((p, idx) => {
+        const el = document.createElement('div');
+        el.className = "flex items-center justify-between bg-slate-900 border border-slate-800 p-2 rounded-xl text-xs";
+        el.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-slate-500 text-[10px]">#${idx + 1}</span>
+            <span class="font-semibold text-slate-200">${p.name}</span>
+            <span class="text-[9px] bg-brand-purple/30 text-purple-300 px-1.5 py-0.2 rounded">${p.badge}</span>
+          </div>
+          <span class="font-mono font-bold text-brand-gold text-glow-gold">${p.points} Pts</span>
+        `;
+        table.appendChild(el);
+      });
+    }
+
+
+    // --- 7. MOCHILA / INVENTORY ---
+    function toggleMochilaModal() {
+      const modal = document.getElementById('mochilaModal');
+      modal.classList.toggle('hidden');
+    }
+
+    function renderMochila() {
+      const container = document.getElementById('mochilaContent');
+      const badge = document.getElementById('mochilaBadge');
+      container.innerHTML = '';
+
+      badge.innerText = mochilaItems.length;
+
+      if (mochilaItems.length === 0) {
+        container.innerHTML = `<div class="text-center py-6 text-slate-500 text-xs">Mochila vacía.</div>`;
+        return;
+      }
+
+      mochilaItems.forEach(item => {
+        const el = document.createElement('div');
+        el.className = "bg-slate-900 border border-slate-800 p-3 rounded-xl flex justify-between items-center text-xs";
+        el.innerHTML = `
+          <div>
+            <div class="font-bold text-slate-200">${item.title}</div>
+            <div class="text-[10px] text-slate-400">${item.type}</div>
+          </div>
+          <span class="text-[9px] text-slate-500 font-mono">${item.time}</span>
+        `;
+        container.appendChild(el);
+      });
+    }
+
+
+    // --- 8. ACTIVITY FEED & REALTIME SIMULATION ---
+    function addActivityLog(message) {
+      const feed = document.getElementById('activityFeed');
+      const timeStr = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      const entry = document.createElement('div');
+      entry.className = "text-slate-300 border-b border-slate-900/60 pb-1 flex gap-2";
+      entry.innerHTML = `<span class="text-slate-500 font-bold">[${timeStr}]</span> <span>${message}</span>`;
+
+      feed.prepend(entry);
+    }
+
+    function initSimulatedLiveFeed() {
+      // Simulate viewers counter fluctuation
+      setInterval(() => {
+        const viewers = document.getElementById('viewersCount');
+        const current = parseInt(viewers.innerText.replace(',', ''));
+        const diff = Math.floor(Math.random() * 9) - 4;
+        viewers.innerText = (current + diff).toLocaleString();
+      }, 4000);
+
+      // Random incoming activity
+      setInterval(() => {
+        if (!isUnlocked) return;
+        const events = [
+          "🎉 Camila_Live ha reclamado el bono de multiplicador!",
+          "💬 Sofia_Gamer envió 500 estrellas en el stream.",
+          "⚡ Nuevo turno habilitado en tablero."
+        ];
+        if (Math.random() > 0.6) {
+          const randEvent = events[Math.floor(Math.random() * events.length)];
+          addActivityLog(randEvent);
+        }
+      }, 7000);
+    }
+  </script>
+</body>
+</html>
