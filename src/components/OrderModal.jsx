@@ -1,16 +1,18 @@
+import { createPortal } from 'react-dom'
+
 export function OrderModal({ column, quantity, onQuantity, onClose, onConfirm }) {
   if (!column) return null
 
-  return (
+  return createPortal(
     <div
-      className="modal-backdrop"
+      className="modal-backdrop order-modal-backdrop"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose?.()
       }}
     >
       <section className="token-modal" role="dialog" aria-modal="true" aria-labelledby="token-modal-title">
-        <button className="modal-close" onClick={onClose} aria-label="Cerrar modal">×</button>
+        <button type="button" className="modal-close" onClick={onClose} aria-label="Cerrar modal">×</button>
         <span className={`modal-color-dot ${column.className}`} />
         <h2 id="token-modal-title">{column.name}</h2>
         <p className="modal-subtitle">¿Cuántas fichas quieres?</p>
@@ -31,6 +33,7 @@ export function OrderModal({ column, quantity, onQuantity, onClose, onConfirm })
           <button type="button" className="modal-confirm" onClick={onConfirm}>Pedir</button>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }

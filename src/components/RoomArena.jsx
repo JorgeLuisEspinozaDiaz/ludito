@@ -324,7 +324,15 @@ export function RoomArena({
         <>
           <div className="viewer-stage">
             {mainRemote ? (
-              <video className="viewer-video" autoPlay playsInline muted={!soundOn} ref={viewerVideoRef} />
+              <video
+                className="viewer-video"
+                autoPlay
+                playsInline
+                muted={!soundOn}
+                ref={viewerVideoRef}
+                onLoadedMetadata={kickVideoPlay}
+                onPlaying={() => setHasFrames(true)}
+              />
             ) : (
               <div className="empty-preview viewer-empty">
                 <div className="empty-icon"><Icon name="monitor" /></div>
@@ -336,6 +344,18 @@ export function RoomArena({
                   </button>
                 )}
               </div>
+            )}
+            {mainRemote && (
+              <button
+                type="button"
+                className={`viewer-tap-layer ${hasFrames ? 'has-frames' : ''}`}
+                aria-label="Tocar para ver el en vivo"
+                onClick={() => {
+                  kickVideoPlay()
+                  if (!hasFrames) onRetryStream?.()
+                  else if (!soundOn) unlockAudio()
+                }}
+              />
             )}
             {remoteCamera && (
               <video className="viewer-camera-pip" autoPlay playsInline muted ref={viewerCameraRef} />
@@ -351,8 +371,8 @@ export function RoomArena({
               </span>
             ) : null}
             {mainRemote && !hasFrames && (
-              <button type="button" className="viewer-unlock-audio" onClick={() => onRetryStream?.()}>
-                Reconectar video
+              <button type="button" className="viewer-unlock-audio" onClick={() => { kickVideoPlay(); onRetryStream?.() }}>
+                Toca aquí · reconectar video
               </button>
             )}
             {needsGesture && hasFrames && !soundOn && (
@@ -462,8 +482,23 @@ export function RoomArena({
     />
   )
 
+  const modalOpen = Boolean(activeColumn) || historyOpen
+
+  const kickVideoPlay = useCallback(() => {
+    const node = viewerVideoRef.current
+    if (!node) return
+    node.muted = true
+    node.playsInline = true
+    node.play().then(() => {
+      setHasFrames(node.videoWidth > 2)
+      if (!soundOn) setNeedsGesture(true)
+    }).catch(() => {
+      onRetryStream?.()
+    })
+  }, [soundOn, onRetryStream])
+
   return (
-    <main className={`ludo-app ${isAdmin ? 'is-admin' : 'is-viewer'} ${chatOpen ? 'chat-open' : ''} ${roomOpen ? 'room-open' : ''}`}>
+    <main className={`ludo-app ${isAdmin ? 'is-admin' : 'is-viewer'} ${chatOpen ? 'chat-open' : ''} ${roomOpen ? 'room-open' : ''} ${modalOpen ? 'modal-open' : ''}`}>
       <header className="ludo-header">
         <div className="ludo-brand">
           <span className="crown">♛</span>

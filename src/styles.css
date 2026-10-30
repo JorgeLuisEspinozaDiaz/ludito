@@ -162,6 +162,50 @@
   gap:8px;
 }
 .viewer-empty .primary-action{margin-top:14px}
+.viewer-tap-layer{
+  position:absolute;
+  inset:0;
+  z-index:4;
+  border:0;
+  background:transparent;
+  cursor:pointer;
+}
+.viewer-tap-layer.has-frames{pointer-events:none}
+
+/* Modales por encima del vivo sticky (móvil) */
+.modal-backdrop,
+.order-modal-backdrop{
+  position:fixed !important;
+  inset:0 !important;
+  z-index:200 !important;
+  display:grid;
+  place-items:center;
+  padding:max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  background:linear-gradient(135deg,#07070fee,#160d27f2);
+  backdrop-filter:blur(12px);
+}
+@media (max-width:900px){
+  .modal-backdrop,
+  .order-modal-backdrop{
+    align-items:end;
+    place-items:end center;
+  }
+  .order-modal-backdrop .token-modal,
+  .modal-backdrop .token-modal,
+  .modal-backdrop .orders-history-modal{
+    width:100%;
+    max-height:min(85vh,640px);
+    margin-bottom:0;
+    border-radius:18px 18px 12px 12px;
+  }
+  /* El vivo sticky no debe tapar el modal */
+  .ludo-app.is-viewer.modal-open .live-focus{
+    z-index:1 !important;
+  }
+  .ludo-app.is-viewer.modal-open .ludo-header{
+    z-index:2 !important;
+  }
+}
 .invites-card{border-color:#4a3a1f}.invites-help{margin:8px 0 12px;color:#afa2bd;font-size:11px;line-height:1.4}
 .invite-form{display:grid;grid-template-columns:1fr 90px auto;gap:6px;margin-bottom:12px}
 .invite-form input{min-width:0;border:1px solid #39304a;border-radius:8px;background:#0e0d18;color:#fff;padding:9px 10px;font-size:11px}

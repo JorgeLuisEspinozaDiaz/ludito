@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { COLORS } from '../lib/constants'
 
 export function OrdersHistoryModal({ open, ordersByColor = {}, round, onClose }) {
@@ -11,9 +12,9 @@ export function OrdersHistoryModal({ open, ordersByColor = {}, round, onClose })
     })),
   ).sort((a, b) => b.quantity - a.quantity)
 
-  return (
+  return createPortal(
     <div
-      className="modal-backdrop"
+      className="modal-backdrop order-modal-backdrop"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose?.()
@@ -38,6 +39,7 @@ export function OrdersHistoryModal({ open, ordersByColor = {}, round, onClose })
         )}
         <button type="button" className="modal-confirm orders-history-close" onClick={onClose}>Cerrar</button>
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }
