@@ -1,54 +1,110 @@
-import { getIceServers } from './iceConfig'
+import { getRtcConfiguration } from './iceConfig'
 
-const ICE = () => ({ iceServers: getIceServers() })
+function iceConfig() {
+  return getRtcConfiguration()
+}
+
+async function addIceSafe(pc, candidate, pending) {
+  if (!candidate) return
+  if (!pc.remoteDescription) {
+    pending.push(candidate)
+    return
+  }
+  try {
+    await pc.addIceCandidate(candidate)
+  } catch {
+    /* ignore obsolete candidates */
+  }
+}
+
+async function flushIce(pc, pending) {
+  const batch = pending.splice(0, pending.length)
+  for (const candidate of batch) {
+    try {
+      await pc.addIceCandidate(candidate)
+    } catch {
+      /* ignore */
+    }
+  }
+}
 
 /** Admin: publica media a cada viewer */
 export function createBroadcaster({ sendSignal, getLocalStream }) {
   const peers = new Map()
 
   async function connectViewer(viewerId) {
-    if (peers.has(viewerId)) {
-      peers.get(viewerId).close()
+    const existing = peers.get(viewerId)
+    if (existing) {
+      existing.pc.close()
       peers.delete(viewerId)
     }
 
     const stream = getLocalStream?.()
     if (!stream || stream.getTracks().length === 0) return
 
-    const pc = new RTCPeerConnection(ICE())
-    peers.set(viewerId, pc)
+    const pc = new RTCPeerConnection(iceConfig())
+    const pending = []
+    peers.set(viewerId, { pc, pending })
 
     const roles = {}
     for (const track of stream.getTracks()) {
       const role = track._luditoRole || (track.kind === 'audio' ? 'audio' : 'screen')
       roles[track.id] = role
+      try {
+        track.contentHint = role === 'camera' ? 'motion' : track.kind === 'video' ? 'detail' : track.contentHint
+      } catch {
+        /* ignore */
+      }
       pc.addTrack(track, stream)
     }
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        sendSignal(viewerId, { kind: 'candidate', candidate: event.candidate })
+        sendSignal(viewerId, { kind: 'candidate', candidate: event.candidate.toJSON?.() || event.candidate })
       }
     }
 
-    const offer = await pc.createOffer()
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed') {
+        try {
+          pc.restartIce()
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    const offer = await pc.createOffer({
+      offerToReceiveAudio: false,
+      offerToReceiveVideo: false,
+    })
     await pc.setLocalDescription(offer)
-    sendSignal(viewerId, { kind: 'offer', sdp: pc.localDescription, roles })
+    sendSignal(viewerId, {
+      kind: 'offer',
+      sdp: pc.localDescription,
+      roles,
+    })
   }
 
   async function handleSignal(from, signal) {
-    const pc = peers.get(from)
-    if (!pc || !signal) return
+    const entry = peers.get(from)
+    if (!entry || !signal) return
+    const { pc, pending } = entry
+
     if (signal.kind === 'answer') {
-      if (pc.signalingState === 'have-local-offer') {
-        await pc.setRemoteDescription(signal.sdp)
-      }
-    } else if (signal.kind === 'candidate' && signal.candidate) {
       try {
-        await pc.addIceCandidate(signal.candidate)
+        if (pc.signalingState === 'have-local-offer') {
+          await pc.setRemoteDescription(signal.sdp)
+          await flushIce(pc, pending)
+        }
       } catch {
-        /* ignore */
+        /* ignore glare */
       }
+      return
+    }
+
+    if (signal.kind === 'candidate' && signal.candidate) {
+      await addIceSafe(pc, signal.candidate, pending)
     }
   }
 
@@ -62,7 +118,7 @@ export function createBroadcaster({ sendSignal, getLocalStream }) {
   async function replaceTrackByRole(role, nextTrack) {
     if (nextTrack) nextTrack._luditoRole = role
     const tasks = []
-    for (const pc of peers.values()) {
+    for (const { pc } of peers.values()) {
       for (const sender of pc.getSenders()) {
         const current = sender.track
         if (!current) continue
@@ -81,7 +137,7 @@ export function createBroadcaster({ sendSignal, getLocalStream }) {
   }
 
   function close() {
-    for (const pc of peers.values()) pc.close()
+    for (const { pc } of peers.values()) pc.close()
     peers.clear()
   }
 
@@ -89,8 +145,10 @@ export function createBroadcaster({ sendSignal, getLocalStream }) {
 }
 
 /** Viewer: recibe pantalla + cámara + audio */
-export function createViewer({ sendSignal, onStreams }) {
+export function createViewer({ sendSignal, onStreams, onConnectionState }) {
   let pc = null
+  let pending = []
+  let adminId = null
   const remote = {
     screen: null,
     camera: null,
@@ -109,7 +167,6 @@ export function createViewer({ sendSignal, onStreams }) {
       all.push(remote.audio)
       playback.push(remote.audio)
     }
-    // If only camera (no screen), play camera as main with audio
     if (!remote.screen && remote.camera) playback.unshift(remote.camera)
 
     onStreams?.({
@@ -118,19 +175,27 @@ export function createViewer({ sendSignal, onStreams }) {
       playback: playback.length ? new MediaStream(playback) : null,
       combined: all.length ? new MediaStream(all) : null,
       hasVideo: Boolean(remote.screen || remote.camera),
+      hasAudio: Boolean(remote.audio),
+      connectionState: pc?.connectionState || 'new',
+      iceState: pc?.iceConnectionState || 'new',
     })
   }
 
   async function handleSignal(from, signal) {
     if (!signal) return
+    adminId = from || adminId
 
     if (signal.kind === 'offer') {
-      if (pc) pc.close()
+      if (pc) {
+        pc.close()
+        pc = null
+      }
+      pending = []
       remote.screen = null
       remote.camera = null
       remote.audio = null
 
-      pc = new RTCPeerConnection(ICE())
+      pc = new RTCPeerConnection(iceConfig())
       const roles = signal.roles || {}
       let videoCount = 0
 
@@ -149,7 +214,14 @@ export function createViewer({ sendSignal, onStreams }) {
         else if (role === 'audio') remote.audio = track
         else remote.screen = track
 
+        try {
+          track.enabled = true
+        } catch {
+          /* ignore */
+        }
+
         track.onunmute = () => emit()
+        track.onmute = () => emit()
         track.onended = () => {
           if (remote.screen === track) remote.screen = null
           if (remote.camera === track) remote.camera = null
@@ -160,31 +232,48 @@ export function createViewer({ sendSignal, onStreams }) {
       }
 
       pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          sendSignal(from, { kind: 'candidate', candidate: event.candidate })
+        if (event.candidate && adminId) {
+          sendSignal(adminId, { kind: 'candidate', candidate: event.candidate.toJSON?.() || event.candidate })
         }
       }
 
+      pc.onconnectionstatechange = () => {
+        onConnectionState?.(pc.connectionState)
+        emit()
+        if (pc.connectionState === 'failed') {
+          try {
+            pc.restartIce()
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+
+      pc.oniceconnectionstatechange = () => {
+        onConnectionState?.(pc.iceConnectionState)
+        emit()
+      }
+
       await pc.setRemoteDescription(signal.sdp)
+      await flushIce(pc, pending)
       const answer = await pc.createAnswer()
       await pc.setLocalDescription(answer)
       sendSignal(from, { kind: 'answer', sdp: pc.localDescription })
+      emit()
       return
     }
 
     if (!pc) return
     if (signal.kind === 'candidate' && signal.candidate) {
-      try {
-        await pc.addIceCandidate(signal.candidate)
-      } catch {
-        /* ignore */
-      }
+      await addIceSafe(pc, signal.candidate, pending)
     }
   }
 
   function close() {
     pc?.close()
     pc = null
+    pending = []
+    adminId = null
     remote.screen = null
     remote.camera = null
     remote.audio = null

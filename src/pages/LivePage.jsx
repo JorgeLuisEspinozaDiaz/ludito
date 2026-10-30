@@ -15,12 +15,23 @@ export function LivePage() {
   const [credentials, setCredentials] = useState(() => (
     linkPin ? { name: 'jugador', code: linkPin } : null
   ))
-  const [media, setMedia] = useState({ screen: null, camera: null, playback: null, combined: null, hasVideo: false })
+  const [media, setMedia] = useState({
+    screen: null,
+    camera: null,
+    playback: null,
+    combined: null,
+    hasVideo: false,
+    hasAudio: false,
+    connectionState: 'new',
+    iceState: 'new',
+  })
   const [resultBanner, setResultBanner] = useState(null)
   const [toasts, setToasts] = useState([])
   const viewerRef = useRef(null)
   const youRef = useRef(null)
   const stateRef = useRef(null)
+  const sendRef = useRef(null)
+  const retryTimerRef = useRef(null)
 
   const { state, you, error, connected, send, setHandlers, setError } = useRoom({
     roomId: roomKey,
@@ -52,22 +63,48 @@ export function LivePage() {
   }, [])
 
   useEffect(() => {
-    viewerRef.current = createViewer({
-      sendSignal: (to, signal) => send({ type: 'signal', to, signal }),
-      onStreams: (next) => setMedia(next),
-    })
-    return () => viewerRef.current?.close()
+    sendRef.current = send
   }, [send])
+
+  const requestStream = useCallback(() => {
+    sendRef.current?.({ type: 'request_stream' })
+  }, [])
+
+  useEffect(() => {
+    viewerRef.current = createViewer({
+      sendSignal: (to, signal) => sendRef.current?.({ type: 'signal', to, signal }),
+      onStreams: (next) => setMedia(next),
+      onConnectionState: (connState) => {
+        if (connState === 'failed' || connState === 'disconnected') {
+          window.clearTimeout(retryTimerRef.current)
+          retryTimerRef.current = window.setTimeout(() => requestStream(), 1200)
+        }
+      },
+    })
+    return () => {
+      window.clearTimeout(retryTimerRef.current)
+      viewerRef.current?.close()
+    }
+  }, [requestStream])
 
   useEffect(() => {
     setHandlers({
       onJoined: () => {
-        send({ type: 'request_stream' })
+        requestStream()
       },
       onSignal: ({ from, signal }) => {
         viewerRef.current?.handleSignal(from, signal)
       },
-      onAdminLeft: () => setMedia({ screen: null, camera: null, playback: null, combined: null, hasVideo: false }),
+      onAdminLeft: () => setMedia({
+        screen: null,
+        camera: null,
+        playback: null,
+        combined: null,
+        hasVideo: false,
+        hasAudio: false,
+        connectionState: 'closed',
+        iceState: 'closed',
+      }),
       onOrderToast: pushToast,
       onWinner: ({ color }) => {
         const mine = (stateRef.current?.ordersByColor?.[color] || []).find(
@@ -82,11 +119,17 @@ export function LivePage() {
         })
       },
     })
-  }, [setHandlers, send, pushToast])
+  }, [setHandlers, requestStream, pushToast])
 
   useEffect(() => {
-    if (state.streamActive) send({ type: 'request_stream' })
-  }, [state.streamActive, state.cameraActive, state.screenActive, send])
+    if (!state.streamActive) return undefined
+    requestStream()
+    const timer = window.setInterval(() => {
+      const dead = !media.hasVideo || media.connectionState === 'failed' || media.iceState === 'failed'
+      if (dead) requestStream()
+    }, 4000)
+    return () => window.clearInterval(timer)
+  }, [state.streamActive, state.cameraActive, state.screenActive, requestStream, media.hasVideo, media.connectionState, media.iceState])
 
   const seenWinnerRound = useRef(null)
   useEffect(() => {
@@ -108,10 +151,13 @@ export function LivePage() {
   const message = useMemo(() => {
     if (state.status === 'result' && state.winningColor) return `Resultado: gana ${state.winningColor}`
     if (state.status === 'closed') return 'Compras cerradas · esperando color ganador'
-    if (media.hasVideo) return 'Estás viendo el en vivo'
-    if (state.streamActive) return 'Conectando con el admin…'
+    if (media.hasVideo && (media.connectionState === 'connected' || media.iceState === 'connected' || media.iceState === 'completed')) {
+      return 'Estás viendo el en vivo'
+    }
+    if (media.hasVideo) return 'Señal recibida · estabilizando video…'
+    if (state.streamActive) return 'Conectando video/audio con el admin…'
     return 'Esperando que el admin pulse Iniciar en vivo'
-  }, [state, media.hasVideo])
+  }, [state, media])
 
   if (!credentials || (error && !connected)) {
     return (
@@ -157,9 +203,11 @@ export function LivePage() {
       you={you}
       state={state}
       message={message}
-      remoteScreen={media.playback || media.screen}
+      remoteScreen={media.playback || media.screen || media.camera}
       remoteCamera={media.camera && media.screen ? media.camera : null}
       remoteStream={media.playback || media.combined}
+      mediaConnection={media.connectionState}
+      onRetryStream={requestStream}
       toasts={toasts}
       onSendChat={(text) => send({ type: 'chat', text })}
       onOrder={(color, quantity) => send({ type: 'order', color, quantity })}
