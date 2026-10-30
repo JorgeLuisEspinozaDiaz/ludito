@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from './Icon'
 import { COLORS } from '../lib/constants'
 import { parseOrderCommand } from '../lib/parseOrderCommand'
@@ -7,12 +7,20 @@ export function ChatPanel({
   messages = [],
   onlineCount = 0,
   canOrder = false,
+  showColorShortcuts = true,
   onSend,
   onReact,
   onOrder,
   onPickColor,
 }) {
   const [text, setText] = useState('')
+  const listRef = useRef(null)
+
+  useEffect(() => {
+    const node = listRef.current
+    if (!node) return
+    node.scrollTop = node.scrollHeight
+  }, [messages])
 
   const submit = (event) => {
     event.preventDefault()
@@ -38,7 +46,7 @@ export function ChatPanel({
         <h3>Chat en vivo</h3>
         <span className="online-count"><i className="online-dot" /> {onlineCount} conectados</span>
       </div>
-      <div className="chat-messages">
+      <div className="chat-messages" ref={listRef}>
         {messages.length === 0 && <p className="chat-empty">Sé el primero en escribir…</p>}
         {messages.map((message) => (
           <div className="chat-message" key={message.id}>
@@ -53,7 +61,7 @@ export function ChatPanel({
           </div>
         ))}
       </div>
-      {canOrder && (
+      {canOrder && showColorShortcuts && (
         <div className="chat-color-row">
           {COLORS.map((column) => (
             <button

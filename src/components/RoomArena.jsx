@@ -51,6 +51,8 @@ export function RoomArena({
   const [historyOpen, setHistoryOpen] = useState(false)
   const [volume, setVolume] = useState(0.85)
   const [muted, setMuted] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [sideTab, setSideTab] = useState('players')
   const viewerVideoRef = useRef(null)
   const viewerCameraRef = useRef(null)
 
@@ -307,8 +309,24 @@ export function RoomArena({
     />
   )
 
+  const chatOnline = state.viewerCount + (participants.some((p) => p.role === 'admin') ? 1 : 0)
+  const unreadHint = (state.chat || []).length
+
+  const chatPanel = (
+    <ChatPanel
+      messages={state.chat}
+      onlineCount={chatOnline}
+      canOrder={canOrder}
+      showColorShortcuts={isAdmin}
+      onSend={(text) => onSendChat?.(text)}
+      onReact={(emoji) => onSendChat?.(emoji)}
+      onOrder={onOrder}
+      onPickColor={openColor}
+    />
+  )
+
   return (
-    <main className="ludo-app">
+    <main className={`ludo-app ${isAdmin ? 'is-admin' : 'is-viewer'} ${chatOpen ? 'chat-open' : ''}`}>
       <header className="ludo-header">
         <div className="ludo-brand">
           <span className="crown">♛</span>
@@ -330,12 +348,21 @@ export function RoomArena({
               <Icon name="copy" /> Link
             </button>
           )}
+          <button
+            type="button"
+            className="ghost-btn chat-header-btn"
+            onClick={() => setChatOpen(true)}
+            aria-label="Abrir chat"
+          >
+            <Icon name="chat" /> Chat
+            {unreadHint > 0 && <b className="chat-badge">{Math.min(99, unreadHint)}</b>}
+          </button>
         </div>
       </header>
 
       <div className="ludo-layout">
         <section className="arena-column">
-          <div className="hero-banner">
+          <div className="hero-banner hero-compact">
             <img src="/assets/ludo-1.png" alt="Ludo King Dance Season" />
             <div>
               <p>EVENTO ESPECIAL</p>
@@ -344,17 +371,24 @@ export function RoomArena({
             </div>
           </div>
 
-          {isAdmin ? (
-            <>
+          <div className="live-stage-row">
+            <div className="live-focus">
               {streamBlock}
-              {boardBlock}
-            </>
-          ) : (
-            <>
-              {streamBlock}
-              {boardBlock}
-            </>
-          )}
+            </div>
+
+            <div className={`chat-rail ${chatOpen ? 'is-open' : ''}`}>
+              <div className="chat-sheet-handle" />
+              <div className="chat-sheet-head">
+                <strong>Chat en vivo</strong>
+                <button type="button" className="ghost-btn" onClick={() => setChatOpen(false)} aria-label="Cerrar chat">
+                  <Icon name="close" />
+                </button>
+              </div>
+              <div className="chat-rail-body">
+                {chatPanel}
+              </div>
+            </div>
+          </div>
 
           {!isAdmin && myOrders.length > 0 && (
             <div className="my-colors-card">
@@ -366,6 +400,8 @@ export function RoomArena({
               </div>
             </div>
           )}
+
+          {boardBlock}
         </section>
 
         <aside className="ludo-sidebar">
@@ -388,46 +424,75 @@ export function RoomArena({
             </div>
           )}
 
-          <div className="side-card">
-            <div className="side-head">
-              <h3>Jugadores</h3>
-              <span>{viewers.length} en vivo <i className="online-dot" /></span>
-            </div>
-            {viewers.length === 0 && <p className="side-empty">Aún no hay espectadores</p>}
-            {viewers.slice(0, 8).map((player) => (
-              <div className="player-row" key={player.id}>
-                <span className="player-avatar purple-bg">
-                  {player.name.slice(0, 1).toUpperCase()}
-                </span>
-                <div>
-                  <b>{player.name}</b>
-                  <small>Conectado</small>
-                </div>
+          <div className="side-tabs">
+            <button
+              type="button"
+              className={sideTab === 'players' ? 'active' : ''}
+              onClick={() => setSideTab('players')}
+            >
+              Jugadores ({viewers.length})
+            </button>
+            <button
+              type="button"
+              className={sideTab === 'activity' ? 'active' : ''}
+              onClick={() => setSideTab('activity')}
+            >
+              Actividad
+            </button>
+          </div>
+
+          {sideTab === 'players' && (
+            <div className="side-card">
+              <div className="side-head">
+                <h3>Jugadores</h3>
+                <span>{viewers.length} en vivo <i className="online-dot" /></span>
               </div>
-            ))}
-          </div>
-
-          <div className="side-card activity">
-            <div className="side-head">
-              <h3>Actividad en vivo</h3>
-              <span className="live-label">● EN VIVO</span>
+              {viewers.length === 0 && <p className="side-empty">Aún no hay espectadores</p>}
+              {viewers.slice(0, 8).map((player) => (
+                <div className="player-row" key={player.id}>
+                  <span className="player-avatar purple-bg">
+                    {player.name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <div>
+                    <b>{player.name}</b>
+                    <small>Conectado</small>
+                  </div>
+                </div>
+              ))}
             </div>
-            {(state.activity || []).slice().reverse().map((line, index) => (
-              <p key={`${line}-${index}`}>🎲 {line}</p>
-            ))}
-          </div>
+          )}
 
-          <ChatPanel
-            messages={state.chat}
-            onlineCount={state.viewerCount + (participants.some((p) => p.role === 'admin') ? 1 : 0)}
-            canOrder={canOrder}
-            onSend={(text) => onSendChat?.(text)}
-            onReact={(emoji) => onSendChat?.(emoji)}
-            onOrder={onOrder}
-            onPickColor={openColor}
-          />
+          {sideTab === 'activity' && (
+            <div className="side-card activity">
+              <div className="side-head">
+                <h3>Actividad en vivo</h3>
+                <span className="live-label">● EN VIVO</span>
+              </div>
+              {(state.activity || []).length === 0 && <p className="side-empty">Sin actividad aún</p>}
+              {(state.activity || []).slice().reverse().map((line, index) => (
+                <p key={`${line}-${index}`}>🎲 {line}</p>
+              ))}
+            </div>
+          )}
         </aside>
       </div>
+
+      <button
+        type="button"
+        className="chat-fab"
+        onClick={() => setChatOpen(true)}
+        aria-label="Abrir chat en vivo"
+      >
+        <Icon name="chat" />
+        <span>Chat</span>
+        {unreadHint > 0 && <b className="chat-badge">{Math.min(99, unreadHint)}</b>}
+      </button>
+
+      <div
+        className={`chat-sheet-backdrop ${chatOpen ? 'is-open' : ''}`}
+        onClick={() => setChatOpen(false)}
+        aria-hidden={!chatOpen}
+      />
 
       <OrderModal
         column={activeColumn}
