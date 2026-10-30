@@ -175,9 +175,9 @@ export function LivePage() {
     if (state.status === 'result' && state.winningColor) return `Resultado: gana ${state.winningColor}`
     if (state.status === 'closed') return 'Compras cerradas · esperando color ganador'
     if (media.hasVideo && (media.connectionState === 'connected' || media.iceState === 'connected' || media.iceState === 'completed')) {
-      return 'Estás viendo el en vivo'
+      return 'Conectado · si ves negro toca Reconectar video'
     }
-    if (media.hasVideo) return 'Señal recibida · estabilizando video…'
+    if (media.hasVideo) return 'Señal recibida · cargando imagen…'
     if (state.streamActive) return 'Conectando video/audio con el admin…'
     return 'Esperando que el admin pulse Iniciar en vivo'
   }, [state, media])

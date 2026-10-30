@@ -114,16 +114,19 @@ export function createBroadcaster({ sendSignal, getLocalStream }) {
       peers.set(viewerId, { pc, pending })
 
       const roles = {}
+      const roleOrder = []
       for (const track of stream.getTracks()) {
         const role = trackRole(track) || (track.kind === 'audio' ? 'audio' : 'screen')
         track._luditoRole = role
         roles[track.id] = role
+        roleOrder.push(role)
         try {
           track.contentHint = role === 'camera' ? 'motion' : track.kind === 'video' ? 'detail' : track.contentHint
         } catch {
           /* ignore */
         }
-        pc.addTrack(track, stream)
+        // Un MediaStream por track: más fiable en móviles
+        pc.addTrack(track, new MediaStream([track]))
       }
 
       pc.onicecandidate = (event) => {
@@ -146,10 +149,19 @@ export function createBroadcaster({ sendSignal, getLocalStream }) {
         offerToReceiveVideo: false,
       })
       await pc.setLocalDescription(offer)
+
+      const rolesByMid = {}
+      for (const tr of pc.getTransceivers()) {
+        const track = tr.sender?.track
+        if (tr.mid && track) rolesByMid[tr.mid] = trackRole(track) || roles[track.id]
+      }
+
       sendSignal(viewerId, {
         kind: 'offer',
         sdp: pc.localDescription,
         roles,
+        rolesByMid,
+        roleOrder,
       })
       return true
     })
@@ -234,6 +246,11 @@ export function createBroadcaster({ sendSignal, getLocalStream }) {
   }
 }
 
+function tracksKey(stream) {
+  if (!stream) return ''
+  return stream.getTracks().map((t) => t.id).join(',')
+}
+
 /** Viewer: SOLO recibe (sin micrófono ni cámara local) */
 export function createViewer({ sendSignal, onStreams, onConnectionState }) {
   let pc = null
@@ -245,26 +262,31 @@ export function createViewer({ sendSignal, onStreams, onConnectionState }) {
     camera: null,
     audio: null,
   }
+  let screenMs = null
+  let cameraMs = null
+  let playbackMs = null
+
+  function ensureStream(current, tracks) {
+    const nextTracks = tracks.filter(Boolean)
+    if (!nextTracks.length) return null
+    if (current && tracksKey(current) === nextTracks.map((t) => t.id).join(',')) return current
+    return new MediaStream(nextTracks)
+  }
 
   function emit() {
-    const all = []
-    const playback = []
-    if (remote.screen) {
-      all.push(remote.screen)
-      playback.push(remote.screen)
-    }
-    if (remote.camera) all.push(remote.camera)
-    if (remote.audio) {
-      all.push(remote.audio)
-      playback.push(remote.audio)
-    }
-    if (!remote.screen && remote.camera) playback.unshift(remote.camera)
+    screenMs = ensureStream(screenMs, remote.screen ? [remote.screen] : [])
+    cameraMs = ensureStream(cameraMs, remote.camera ? [remote.camera] : [])
+    const playTracks = []
+    if (remote.screen) playTracks.push(remote.screen)
+    else if (remote.camera) playTracks.push(remote.camera)
+    if (remote.audio) playTracks.push(remote.audio)
+    playbackMs = ensureStream(playbackMs, playTracks)
 
     onStreams?.({
-      screen: remote.screen ? new MediaStream([remote.screen]) : null,
-      camera: remote.camera ? new MediaStream([remote.camera]) : null,
-      playback: playback.length ? new MediaStream(playback) : null,
-      combined: all.length ? new MediaStream(all) : null,
+      screen: screenMs,
+      camera: cameraMs,
+      playback: playbackMs,
+      combined: playbackMs,
       hasVideo: Boolean(remote.screen || remote.camera),
       hasAudio: Boolean(remote.audio),
       connectionState: pc?.connectionState || 'new',
@@ -286,20 +308,29 @@ export function createViewer({ sendSignal, onStreams, onConnectionState }) {
       remote.screen = null
       remote.camera = null
       remote.audio = null
+      screenMs = null
+      cameraMs = null
+      playbackMs = null
 
       pc = new RTCPeerConnection(iceConfig())
       const roles = signal.roles || {}
+      const rolesByMid = signal.rolesByMid || {}
+      const roleOrder = signal.roleOrder || []
       let videoCount = 0
+      let orderIdx = 0
 
       pc.ontrack = (event) => {
         if (seq !== offerSeq) return
         const track = event.track
-        let role = roles[track.id]
+        const mid = event.transceiver?.mid
+        let role = roles[track.id] || (mid && rolesByMid[mid]) || null
         if (!role) {
           if (track.kind === 'audio') role = 'audio'
           else {
+            while (orderIdx < roleOrder.length && roleOrder[orderIdx] === 'audio') orderIdx += 1
+            role = roleOrder[orderIdx] || (videoCount === 0 ? 'screen' : 'camera')
+            orderIdx += 1
             videoCount += 1
-            role = videoCount === 1 ? 'screen' : 'camera'
           }
         }
 
@@ -310,7 +341,6 @@ export function createViewer({ sendSignal, onStreams, onConnectionState }) {
         try { track.enabled = true } catch { /* ignore */ }
 
         track.onunmute = () => emit()
-        track.onmute = () => emit()
         track.onended = () => {
           if (remote.screen === track) remote.screen = null
           if (remote.camera === track) remote.camera = null
@@ -366,6 +396,9 @@ export function createViewer({ sendSignal, onStreams, onConnectionState }) {
     remote.screen = null
     remote.camera = null
     remote.audio = null
+    screenMs = null
+    cameraMs = null
+    playbackMs = null
     emit()
   }
 

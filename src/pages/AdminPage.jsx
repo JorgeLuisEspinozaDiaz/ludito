@@ -122,9 +122,20 @@ export function AdminPage() {
     setHandlers({
       onViewerReady: ({ viewerId }) => {
         viewerIdsRef.current.add(viewerId)
-        buildOutgoingStream()
-        // No forzar: si ya está conectado, solo sincroniza tracks
-        broadcasterRef.current?.connectViewer(viewerId, { force: false })
+        const push = async (force) => {
+          buildOutgoingStream()
+          const stream = mixedStreamRef.current
+          if (!stream || stream.getTracks().length === 0) return false
+          return broadcasterRef.current?.connectViewer(viewerId, { force })
+        }
+        // Viewer nuevo: SIEMPRE oferta fresca (si no, entra y ve negro)
+        void (async () => {
+          let ok = await push(true)
+          if (!ok) {
+            window.setTimeout(() => { void push(true) }, 700)
+            window.setTimeout(() => { void push(true) }, 2000)
+          }
+        })()
       },
       onSignal: ({ from, signal }) => {
         broadcasterRef.current?.handleSignal(from, signal)

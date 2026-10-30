@@ -53,14 +53,16 @@ export function RoomArena({
   const [quantity, setQuantity] = useState(1)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [volume, setVolume] = useState(0.85)
-  // Empieza muteado: el autoplay del navegador bloquea video+audio juntos → pantalla negra
-  const [muted, setMuted] = useState(true)
-  const [needsGesture, setNeedsGesture] = useState(false)
+  // Sonido solo tras gesto: si el <video> no está muted, el navegador bloquea y queda NEGRO
+  const [soundOn, setSoundOn] = useState(false)
+  const [needsGesture, setNeedsGesture] = useState(true)
+  const [hasFrames, setHasFrames] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [roomOpen, setRoomOpen] = useState(false)
   const [sideTab, setSideTab] = useState('players')
   const viewerVideoRef = useRef(null)
   const viewerCameraRef = useRef(null)
+  const attachedMainKey = useRef('')
 
   const isAdmin = role === 'admin'
   const canOrder = !isAdmin && state.status === 'open'
@@ -79,73 +81,119 @@ export function RoomArena({
 
   const mainRemote = remoteScreen || remoteStream
 
-  const tryPlay = useCallback(async (node, withSound) => {
+  const streamKey = (stream) => {
+    if (!stream) return ''
+    return stream.getTracks().map((t) => t.id).join(',')
+  }
+
+  const tryPlayMuted = useCallback(async (node) => {
     if (!node) return false
     node.playsInline = true
     node.setAttribute('playsinline', '')
     node.setAttribute('webkit-playsinline', '')
+    node.muted = true
+    node.volume = volume
     try {
-      node.muted = withSound ? muted : true
-      node.volume = volume
       await node.play()
-      if (withSound && !muted) setNeedsGesture(false)
       return true
     } catch {
-      // Autoplay con sonido bloqueado: forzar mute y reintentar
-      try {
-        node.muted = true
-        await node.play()
-        setNeedsGesture(true)
-        setMuted(true)
-        return true
-      } catch {
-        setNeedsGesture(true)
-        return false
-      }
+      setNeedsGesture(true)
+      return false
     }
-  }, [muted, volume])
+  }, [volume])
 
   useEffect(() => {
     const node = viewerVideoRef.current
     if (!node) return
-    if (mainRemote) {
-      if (node.srcObject !== mainRemote) node.srcObject = mainRemote
-      tryPlay(node, true)
-    } else {
+    if (!mainRemote) {
       node.srcObject = null
+      attachedMainKey.current = ''
+      setHasFrames(false)
+      return
     }
-  }, [mainRemote, tryPlay])
+    const key = streamKey(mainRemote)
+    if (attachedMainKey.current !== key) {
+      attachedMainKey.current = key
+      node.srcObject = mainRemote
+      setHasFrames(false)
+    }
+    // Siempre reproducir muteado primero (garantiza imagen)
+    node.muted = !soundOn
+    tryPlayMuted(node).then(() => {
+      if (soundOn) {
+        node.muted = false
+        node.play().catch(() => {
+          node.muted = true
+          setSoundOn(false)
+          setNeedsGesture(true)
+        })
+      }
+    })
+  }, [mainRemote, tryPlayMuted, soundOn])
 
   useEffect(() => {
     const node = viewerCameraRef.current
     if (!node) return
     if (remoteCamera) {
       if (node.srcObject !== remoteCamera) node.srcObject = remoteCamera
-      tryPlay(node, false)
+      node.muted = true
+      node.play().catch(() => {})
     } else {
       node.srcObject = null
     }
-  }, [remoteCamera, tryPlay])
+  }, [remoteCamera])
 
   useEffect(() => {
-    const apply = (node) => {
-      if (!node) return
-      node.volume = volume
-      node.muted = muted
-      if (node.srcObject) node.play().catch(() => {})
+    const node = viewerVideoRef.current
+    if (!node?.srcObject) return
+    node.volume = volume
+    if (soundOn) {
+      node.muted = false
+      node.play().catch(() => {
+        node.muted = true
+        setSoundOn(false)
+        setNeedsGesture(true)
+      })
+    } else {
+      node.muted = true
     }
-    apply(viewerVideoRef.current)
-  }, [volume, muted])
+  }, [volume, soundOn])
+
+  // Detectar frames reales (si no hay, el cartel "en vivo" mentía)
+  useEffect(() => {
+    if (!mainRemote) {
+      setHasFrames(false)
+      return undefined
+    }
+    const tick = () => {
+      const node = viewerVideoRef.current
+      const ok = Boolean(node && node.videoWidth > 2 && !node.paused)
+      setHasFrames(ok)
+    }
+    tick()
+    const id = window.setInterval(tick, 800)
+    return () => window.clearInterval(id)
+  }, [mainRemote])
+
+  // Si hay señal de sala pero no hay frames, re-pedir stream
+  useEffect(() => {
+    if (isAdmin || !state.streamActive || hasFrames) return undefined
+    const timer = window.setTimeout(() => {
+      if (!hasFrames) onRetryStream?.()
+    }, 3500)
+    return () => window.clearTimeout(timer)
+  }, [isAdmin, state.streamActive, hasFrames, onRetryStream, mainRemote])
 
   const unlockAudio = useCallback(() => {
-    setMuted(false)
-    setNeedsGesture(false)
     const node = viewerVideoRef.current
     if (!node) return
+    setSoundOn(true)
+    setNeedsGesture(false)
     node.muted = false
     node.volume = volume || 0.85
     node.play().catch(() => {
-      setMuted(true)
+      node.muted = true
+      setSoundOn(false)
       setNeedsGesture(true)
     })
   }, [volume])
@@ -276,7 +324,7 @@ export function RoomArena({
         <>
           <div className="viewer-stage">
             {mainRemote ? (
-              <video className="viewer-video" autoPlay playsInline muted={muted} ref={viewerVideoRef} />
+              <video className="viewer-video" autoPlay playsInline muted={!soundOn} ref={viewerVideoRef} />
             ) : (
               <div className="empty-preview viewer-empty">
                 <div className="empty-icon"><Icon name="monitor" /></div>
@@ -298,11 +346,16 @@ export function RoomArena({
               </span>
             )}
             {liveNow || state.streamActive ? (
-              <span className={`viewer-live-badge ${mainRemote && mediaConnection !== 'failed' ? 'ok' : 'wait'}`}>
-                {mainRemote && mediaConnection !== 'failed' ? 'EN VIVO' : 'SIN SEÑAL'}
+              <span className={`viewer-live-badge ${hasFrames ? 'ok' : 'wait'}`}>
+                {hasFrames ? 'EN VIVO' : 'SIN IMAGEN'}
               </span>
             ) : null}
-            {needsGesture && mainRemote && (
+            {mainRemote && !hasFrames && (
+              <button type="button" className="viewer-unlock-audio" onClick={() => onRetryStream?.()}>
+                Reconectar video
+              </button>
+            )}
+            {needsGesture && hasFrames && !soundOn && (
               <button type="button" className="viewer-unlock-audio" onClick={unlockAudio}>
                 <Icon name="audio" /> Toca para oír el en vivo
               </button>
@@ -320,27 +373,32 @@ export function RoomArena({
                 type="button"
                 className="ghost-btn volume-mute-btn"
                 onClick={() => {
-                  if (muted) unlockAudio()
-                  else setMuted(true)
+                  if (!soundOn) unlockAudio()
+                  else {
+                    setSoundOn(false)
+                    const node = viewerVideoRef.current
+                    if (node) node.muted = true
+                  }
                 }}
-                aria-label={muted ? 'Activar altavoz' : 'Silenciar altavoz'}
+                aria-label={soundOn ? 'Silenciar altavoz' : 'Activar altavoz'}
               >
-                <Icon name={muted || volume === 0 ? 'mute' : 'audio'} />
+                <Icon name={!soundOn || volume === 0 ? 'mute' : 'audio'} />
               </button>
               <input
                 type="range"
                 min="0"
                 max="1"
                 step="0.01"
-                value={muted ? 0 : volume}
+                value={soundOn ? volume : 0}
                 onChange={(event) => {
                   const next = Number(event.target.value)
                   setVolume(next)
-                  setMuted(next === 0)
+                  if (next > 0) unlockAudio()
+                  else setSoundOn(false)
                 }}
                 aria-label="Volumen"
               />
-              <span>{Math.round((muted ? 0 : volume) * 100)}</span>
+              <span>{Math.round((soundOn ? volume : 0) * 100)}</span>
             </div>
 
             <div className="quick-color-inline">
