@@ -58,6 +58,24 @@ export function createBroadcaster({ sendSignal, getLocalStream }) {
     }
   }
 
+  /** Cambia un track al aire sin recrear la conexión (p. ej. otra ventana/pantalla). */
+  async function replaceTrackByRole(role, nextTrack) {
+    if (nextTrack) nextTrack._luditoRole = role
+    const tasks = []
+    for (const pc of peers.values()) {
+      for (const sender of pc.getSenders()) {
+        const current = sender.track
+        if (!current) continue
+        const currentRole = current._luditoRole || (current.kind === 'audio' ? 'audio' : null)
+        if (currentRole === role) {
+          tasks.push(sender.replaceTrack(nextTrack))
+        }
+      }
+    }
+    await Promise.allSettled(tasks)
+    return tasks.length > 0
+  }
+
   function knownViewers() {
     return [...peers.keys()]
   }
@@ -67,7 +85,7 @@ export function createBroadcaster({ sendSignal, getLocalStream }) {
     peers.clear()
   }
 
-  return { connectViewer, handleSignal, republishAll, knownViewers, close }
+  return { connectViewer, handleSignal, republishAll, replaceTrackByRole, knownViewers, close }
 }
 
 /** Viewer: recibe pantalla + cámara + audio */

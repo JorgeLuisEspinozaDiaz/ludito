@@ -33,6 +33,7 @@ export function AdminPage() {
   const micStreamRef = useRef(null)
   const micMutedRef = useRef(true)
   const viewerIdsRef = useRef(new Set())
+  const skipRepublishRef = useRef(false)
 
   const { state, you, error, connected, send, setHandlers, setError } = useRoom({
     roomId: roomKey,
@@ -171,8 +172,13 @@ export function AdminPage() {
       cameraActive: Boolean(cameraStream),
       screenActive: Boolean(screenStream),
     })
+    if (skipRepublishRef.current) {
+      skipRepublishRef.current = false
+      buildOutgoingStream()
+      return
+    }
     republish()
-  }, [screenStream, cameraStream, micStream, micMuted, send, republish])
+  }, [screenStream, cameraStream, micStream, micMuted, send, republish, buildOutgoingStream])
 
   useEffect(() => () => {
     screenStreamRef.current?.getTracks().forEach((t) => t.stop())
@@ -191,21 +197,81 @@ export function AdminPage() {
     setCameraStream(null)
   }, [])
 
+  const displayMediaOptions = {
+    video: {
+      cursor: 'always',
+      frameRate: { ideal: 30 },
+      displaySurface: 'monitor',
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+    },
+    audio: false,
+    // Chrome: permite cambiar la ventana/pestaña compartida sin cortar el track
+    surfaceSwitching: 'include',
+    selfBrowserSurface: 'exclude',
+    preferCurrentTab: false,
+    monitorTypeSurfaces: 'include',
+  }
+
+  const bindScreenTrackEnd = (stream) => {
+    const track = stream?.getVideoTracks?.()[0]
+    if (!track) return
+    track._luditoRole = 'screen'
+    track.onended = () => {
+      stopScreen()
+      const camStill = Boolean(cameraStreamRef.current)
+      setMessage(camStill
+        ? 'Pantalla detenida · cámara y sala siguen al aire'
+        : 'Pantalla detenida')
+    }
+  }
+
   const startScreen = async () => {
     try {
-      const next = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: 'always', frameRate: 30 },
-        audio: false,
-      })
-      next.getVideoTracks()[0].onended = () => {
-        stopScreen()
-        setMessage('Pantalla detenida')
-      }
+      const next = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions)
+      bindScreenTrackEnd(next)
       setScreenStream(next)
-      setMessage('Pantalla al aire')
+      setMessage('Pantalla al aire · tip: elige “Pantalla completa” para cambiar de ventana sin cortar')
       return next
     } catch (err) {
       if (err.name !== 'NotAllowedError') setMessage('No se pudo compartir pantalla')
+      return null
+    }
+  }
+
+  /** Cambia la ventana/pantalla sin cortar el en vivo (cámara/mic siguen). */
+  const changeScreen = async () => {
+    try {
+      setMessage('Elige la nueva ventana o pantalla…')
+      const next = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions)
+      const newTrack = next.getVideoTracks()[0]
+      if (!newTrack) {
+        next.getTracks().forEach((t) => t.stop())
+        setMessage('No se obtuvo video de pantalla')
+        return null
+      }
+
+      bindScreenTrackEnd(next)
+      const previous = screenStreamRef.current
+
+      if (previous) {
+        skipRepublishRef.current = true
+        const replaced = await broadcasterRef.current?.replaceTrackByRole('screen', newTrack)
+        setScreenStream(next)
+        previous.getTracks().forEach((t) => t.stop())
+        if (!replaced) {
+          skipRepublishRef.current = false
+          await republish()
+        }
+      } else {
+        setScreenStream(next)
+      }
+
+      setMessage('Fuente cambiada · sigues en vivo')
+      return next
+    } catch (err) {
+      if (err.name !== 'NotAllowedError') setMessage('No se pudo cambiar la pantalla')
+      else setMessage('Cambio cancelado · el en vivo sigue')
       return null
     }
   }
@@ -340,11 +406,14 @@ export function AdminPage() {
         onToggleScreen={() => {
           if (screenStream) {
             stopScreen()
-            setMessage('Pantalla detenida')
+            setMessage(cameraStream
+              ? 'Pantalla detenida · cámara sigue al aire'
+              : 'Pantalla detenida')
           } else {
             startScreen()
           }
         }}
+        onChangeScreen={changeScreen}
         onToggleCamera={() => {
           if (cameraStream) {
             stopCamera()

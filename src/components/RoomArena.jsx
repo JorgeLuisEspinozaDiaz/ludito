@@ -30,6 +30,7 @@ export function RoomArena({
   onStartLive,
   onStopLive,
   onToggleScreen,
+  onChangeScreen,
   onToggleCamera,
   onToggleMic,
   onCrop,
@@ -52,6 +53,7 @@ export function RoomArena({
   const [volume, setVolume] = useState(0.85)
   const [muted, setMuted] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const [roomOpen, setRoomOpen] = useState(false)
   const [sideTab, setSideTab] = useState('players')
   const viewerVideoRef = useRef(null)
   const viewerCameraRef = useRef(null)
@@ -193,6 +195,11 @@ export function RoomArena({
             <button type="button" className={`secondary-action ${screenStream ? 'is-on' : ''}`} onClick={onToggleScreen}>
               {screenStream ? 'Pantalla ON' : 'Pantalla OFF'}
             </button>
+            {screenStream && (
+              <button type="button" className="secondary-action change-screen-btn" onClick={onChangeScreen}>
+                Cambiar ventana
+              </button>
+            )}
             <button type="button" className={`secondary-action ${cameraStream ? 'is-on' : ''}`} onClick={onToggleCamera}>
               {cameraStream ? 'Cámara ON' : 'Cámara OFF'}
             </button>
@@ -206,6 +213,11 @@ export function RoomArena({
               <Icon name="copy" /> Copiar link
             </button>
           </div>
+          {screenStream && (
+            <p className="screen-share-tip">
+              Tip: comparte <b>Pantalla completa</b> para cambiar de app sin cortar. O usa <b>Cambiar ventana</b> sin terminar el en vivo.
+            </p>
+          )}
           <div className="admin-round-controls">
             {state.status === 'open' ? (
               <button type="button" className="secondary-action" onClick={onCloseOrders}>Cerrar compras</button>
@@ -242,53 +254,57 @@ export function RoomArena({
             ) : null}
           </div>
 
-          <div className="viewer-volume-bar">
-            <button
-              type="button"
-              className="ghost-btn volume-mute-btn"
-              onClick={() => setMuted((value) => !value)}
-              aria-label={muted ? 'Activar sonido' : 'Silenciar'}
-            >
-              <Icon name={muted || volume === 0 ? 'mute' : 'audio'} />
-            </button>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={muted ? 0 : volume}
-              onChange={(event) => {
-                const next = Number(event.target.value)
-                setVolume(next)
-                setMuted(next === 0)
-              }}
-              aria-label="Volumen"
-            />
-            <span>{Math.round((muted ? 0 : volume) * 100)}%</span>
+          <div className="viewer-action-strip">
+            <div className="viewer-volume-compact" title="Volumen">
+              <button
+                type="button"
+                className="ghost-btn volume-mute-btn"
+                onClick={() => setMuted((value) => !value)}
+                aria-label={muted ? 'Activar sonido' : 'Silenciar'}
+              >
+                <Icon name={muted || volume === 0 ? 'mute' : 'audio'} />
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={muted ? 0 : volume}
+                onChange={(event) => {
+                  const next = Number(event.target.value)
+                  setVolume(next)
+                  setMuted(next === 0)
+                }}
+                aria-label="Volumen"
+              />
+              <span>{Math.round((muted ? 0 : volume) * 100)}</span>
+            </div>
+
+            <div className="quick-color-inline">
+              <div className="quick-color-inline-label">
+                <strong>Colores</strong>
+                <small>{canOrder ? 'Toca para pedir' : 'Cerrado'}</small>
+              </div>
+              <div className="quick-color-grid compact">
+                {COLORS.map((column) => (
+                  <button
+                    type="button"
+                    key={column.name}
+                    className={`quick-color-btn ${column.className}`}
+                    disabled={!canOrder}
+                    onClick={() => openColor(column)}
+                    title={column.name}
+                  >
+                    <span>{column.name.slice(0, 3)}</span>
+                    <b>x{state.totals?.[column.name] || 0}</b>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <button type="button" className="ghost-btn view-orders-btn" onClick={() => setHistoryOpen(true)}>
               Ver compras
             </button>
-          </div>
-
-          <div className="quick-color-bar">
-            <div className="quick-color-head">
-              <strong>Pedir color</strong>
-              <small>{canOrder ? 'Toca un color · cerca del vivo' : 'Compras cerradas'}</small>
-            </div>
-            <div className="quick-color-grid">
-              {COLORS.map((column) => (
-                <button
-                  type="button"
-                  key={column.name}
-                  className={`quick-color-btn ${column.className}`}
-                  disabled={!canOrder}
-                  onClick={() => openColor(column)}
-                >
-                  <span>{column.name}</span>
-                  <b>x{state.totals?.[column.name] || 0}</b>
-                </button>
-              ))}
-            </div>
           </div>
         </>
       )}
@@ -326,7 +342,7 @@ export function RoomArena({
   )
 
   return (
-    <main className={`ludo-app ${isAdmin ? 'is-admin' : 'is-viewer'} ${chatOpen ? 'chat-open' : ''}`}>
+    <main className={`ludo-app ${isAdmin ? 'is-admin' : 'is-viewer'} ${chatOpen ? 'chat-open' : ''} ${roomOpen ? 'room-open' : ''}`}>
       <header className="ludo-header">
         <div className="ludo-brand">
           <span className="crown">♛</span>
@@ -336,8 +352,9 @@ export function RoomArena({
           </div>
         </div>
         <div className="room-title">
-          <span className="live-dot" /> SALA EN VIVO <strong>#{roomId}</strong>
+          <span className="live-dot" /> SALA <strong>#{roomId}</strong>
           {you && <em className="you-chip"> · {you.name}</em>}
+          <span className="round-chip">R{state.round} · {state.status}</span>
         </div>
         <div className="header-actions">
           <span className={`status-pill ${liveNow || state.streamActive ? 'is-live' : ''}`}>
@@ -350,8 +367,17 @@ export function RoomArena({
           )}
           <button
             type="button"
+            className="ghost-btn room-panel-btn"
+            onClick={() => { setRoomOpen(true); setChatOpen(false) }}
+            aria-label="Abrir sala"
+          >
+            <Icon name="users" /> Sala
+            <b className="chat-badge soft">{viewers.length}</b>
+          </button>
+          <button
+            type="button"
             className="ghost-btn chat-header-btn"
-            onClick={() => setChatOpen(true)}
+            onClick={() => { setChatOpen(true); setRoomOpen(false) }}
             aria-label="Abrir chat"
           >
             <Icon name="chat" /> Chat
@@ -360,17 +386,8 @@ export function RoomArena({
         </div>
       </header>
 
-      <div className="ludo-layout">
+      <div className="ludo-layout live-only-layout">
         <section className="arena-column">
-          <div className="hero-banner hero-compact">
-            <img src="/assets/ludo-1.png" alt="Ludo King Dance Season" />
-            <div>
-              <p>EVENTO ESPECIAL</p>
-              <h1>Ludo King<br /><span>Dance Season</span></h1>
-              <button type="button" className="gold-btn">Ronda {state.round} · {state.status}</button>
-            </div>
-          </div>
-
           <div className="live-stage-row">
             <div className="live-focus">
               {streamBlock}
@@ -403,8 +420,34 @@ export function RoomArena({
 
           {boardBlock}
         </section>
+      </div>
 
-        <aside className="ludo-sidebar">
+      <button
+        type="button"
+        className="chat-fab"
+        onClick={() => { setChatOpen(true); setRoomOpen(false) }}
+        aria-label="Abrir chat en vivo"
+      >
+        <Icon name="chat" />
+        <span>Chat</span>
+        {unreadHint > 0 && <b className="chat-badge">{Math.min(99, unreadHint)}</b>}
+      </button>
+
+      <div
+        className={`chat-sheet-backdrop ${chatOpen || roomOpen ? 'is-open' : ''}`}
+        onClick={() => { setChatOpen(false); setRoomOpen(false) }}
+        aria-hidden={!chatOpen && !roomOpen}
+      />
+
+      <aside className={`room-drawer ${roomOpen ? 'is-open' : ''}`} aria-hidden={!roomOpen}>
+        <div className="chat-sheet-handle" />
+        <div className="chat-sheet-head">
+          <strong>Sala</strong>
+          <button type="button" className="ghost-btn" onClick={() => setRoomOpen(false)} aria-label="Cerrar sala">
+            <Icon name="close" />
+          </button>
+        </div>
+        <div className="room-drawer-body">
           {isAdmin && (
             <InvitesPanel
               invites={state.invites || []}
@@ -412,16 +455,6 @@ export function RoomArena({
               onCreate={onCreateInvite}
               onDelete={onDeleteInvite}
             />
-          )}
-
-          {!isAdmin && (
-            <div className="art-card">
-              <img src="/assets/ludo-2.png" alt="Ludo King" />
-              <div>
-                <b>EL REY HA LLEGADO</b>
-                <span>Juega. Baila. Domina.</span>
-              </div>
-            </div>
           )}
 
           <div className="side-tabs">
@@ -448,7 +481,7 @@ export function RoomArena({
                 <span>{viewers.length} en vivo <i className="online-dot" /></span>
               </div>
               {viewers.length === 0 && <p className="side-empty">Aún no hay espectadores</p>}
-              {viewers.slice(0, 8).map((player) => (
+              {viewers.slice(0, 12).map((player) => (
                 <div className="player-row" key={player.id}>
                   <span className="player-avatar purple-bg">
                     {player.name.slice(0, 1).toUpperCase()}
@@ -474,25 +507,8 @@ export function RoomArena({
               ))}
             </div>
           )}
-        </aside>
-      </div>
-
-      <button
-        type="button"
-        className="chat-fab"
-        onClick={() => setChatOpen(true)}
-        aria-label="Abrir chat en vivo"
-      >
-        <Icon name="chat" />
-        <span>Chat</span>
-        {unreadHint > 0 && <b className="chat-badge">{Math.min(99, unreadHint)}</b>}
-      </button>
-
-      <div
-        className={`chat-sheet-backdrop ${chatOpen ? 'is-open' : ''}`}
-        onClick={() => setChatOpen(false)}
-        aria-hidden={!chatOpen}
-      />
+        </div>
+      </aside>
 
       <OrderModal
         column={activeColumn}
